@@ -1,0 +1,128 @@
+// Bayani Trucking — Prisma schema
+// https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 1. EMPLOYEES TABLE (Master list of drivers & helpers)
+model Employee {
+  id        String       @id @default(uuid())
+  fullName  String
+  role      EmployeeRole // DRIVER, HELPER, BOTH
+  isActive  Boolean      @default(true) // Set to false if they resign
+  createdAt DateTime     @default(now())
+
+  // Optional: Allows querying all shipments completed by this employee
+  driverShipments ShipmentLog[] @relation("DriverRelation")
+  helperShipments ShipmentLog[] @relation("HelperRelation")
+}
+
+enum EmployeeRole {
+  DRIVER
+  HELPER
+  BOTH
+}
+
+// 2. TRUCKS TABLE (Master fleet list)
+model Truck {
+  id                    String   @id @default(uuid()) // TruckId
+  mvFileNo              String   @unique
+  plateNumber           String   @unique
+  engineNo              String
+  chassisNo             String
+  yearModel             Int
+  make                  String
+  wheelCount            Int      @default(6)
+  truckType             String
+  crIssueDate           DateTime
+  firstRegistrationDate DateTime
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+
+  shipments ShipmentLog[]
+}
+
+// 3. CLIENT MANAGEMENT
+model Client {
+  id        String          @id @default(uuid())
+  name      String          @unique
+  calcType  CalculationType @default(DESTINATION)
+  createdAt DateTime        @default(now())
+
+  routes    DestinationRoute[]
+  shipments ShipmentLog[]
+}
+
+enum CalculationType {
+  DESTINATION
+  WEIGHT
+  ANIMAL_HEADCOUNT
+  PLATFORM
+}
+
+// 4. ROUTE MASTER RATES
+model DestinationRoute {
+  id             String   @id @default(uuid())
+  clientId       String
+  client         Client   @relation(fields: [clientId], references: [id])
+  routeName      String
+  distance       String?
+  driverBaseRate Float
+  helperBaseRate Float
+  createdAt      DateTime @default(now())
+
+  @@unique([clientId, routeName])
+}
+
+// 5. SHIPMENT LOGS (Transactional Event)
+model ShipmentLog {
+  id   String   @id @default(uuid())
+  date DateTime @default(now())
+
+  // --- Truck Info (snapshot + master link) ---
+  plateNumber String // Snapshot plate number string
+  truckId     String?
+  truck       Truck?  @relation(fields: [truckId], references: [id])
+
+  shipmentNumber String
+  clientNumber   String?
+  waybillNumber  String?
+
+  // --- Dynamic Input Fields ---
+  routeName  String?
+  distance   String?
+  weightKg   Float?
+  headCount  Int?
+
+  // --- Personnel Involved ---
+  driverName String // Snapshot driver name
+  driverId   String?
+  driver     Employee? @relation("DriverRelation", fields: [driverId], references: [id])
+
+  helperName String? // Snapshot helper name
+  helperId   String?
+  helper     Employee? @relation("HelperRelation", fields: [helperId], references: [id])
+
+  hasExtraHelper   Boolean @default(false)
+  extraHelperName  String?
+  isDriverAsHelper Boolean @default(false)
+
+  // --- Financial Snapshot ---
+  driverPayout      Float
+  helperPayout      Float
+  extraHelperPayout Float @default(0.0)
+
+  remarks   String?
+  isFlagged Boolean @default(false)
+
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id])
+  createdById String
+  createdAt   DateTime @default(now())
+}

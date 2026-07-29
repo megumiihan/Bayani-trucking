@@ -1,0 +1,203 @@
+import {
+  resolveShipmentRate,
+  type DestinationClient,
+} from "./rates";
+import { calculateDestinationPayout } from "./calculations";
+import type { Shipment } from "./mockData";
+
+export type ShipmentRole = "Driver" | "Helper" | "Extra Helper";
+
+export interface PayoutPreview {
+  driverRate: number;
+  helperRate: number;
+  extraHelperRate: number;
+}
+
+export interface EmployeeShipmentEntry {
+  shipment: Shipment;
+  role: ShipmentRole;
+  payout: number;
+}
+
+function resolveRate(client: string, routeName: string, distanceBand?: string | null) {
+  return resolveShipmentRate(client, routeName, distanceBand);
+}
+
+export function getRouteRate(
+  routeName: string,
+  client = "Pepsi",
+  distanceBand?: string | null
+) {
+  const rate = resolveRate(client, routeName, distanceBand);
+  if (!rate) return undefined;
+
+  return {
+    routeName: rate.routeName,
+    client: rate.client,
+    driverBase: rate.driverBaseRate,
+    helperBase: rate.helperBaseRate,
+    extraHelperBase: rate.extraHelperBaseRate,
+    description: rate.description,
+  };
+}
+
+export function getEmployeeRoleInShipment(
+  shipment: Shipment,
+  employeeName: string
+): ShipmentRole | null {
+  if (shipment.driver === employeeName) return "Driver";
+  if (shipment.helper === employeeName) return "Helper";
+  if (shipment.extraHelper === employeeName) return "Extra Helper";
+  return null;
+}
+
+export function getPayoutForRole(
+  farthestRoute: string,
+  role: ShipmentRole,
+  client = "Pepsi",
+  distanceBand?: string | null
+): number {
+  const rate = getRouteRate(farthestRoute, client, distanceBand);
+  if (!rate) return 0;
+
+  switch (role) {
+    case "Driver":
+      return rate.driverBase;
+    case "Helper":
+      return rate.helperBase;
+    case "Extra Helper":
+      return rate.extraHelperBase;
+  }
+}
+
+export function getEmployeePayoutForShipment(
+  shipment: Shipment,
+  employeeName: string
+): EmployeeShipmentEntry | null {
+  const role = getEmployeeRoleInShipment(shipment, employeeName);
+  if (!role) return null;
+
+  return {
+    shipment,
+    role,
+    payout: getPayoutForRole(
+      shipment.farthestRoute,
+      role,
+      shipment.client,
+      shipment.distanceBand
+    ),
+  };
+}
+
+export function getEmployeeShipmentEntries(
+  shipments: Shipment[],
+  employeeName: string
+): EmployeeShipmentEntry[] {
+  return shipments
+    .map((shipment) => getEmployeePayoutForShipment(shipment, employeeName))
+    .filter((entry): entry is EmployeeShipmentEntry => entry !== null)
+    .sort(
+      (a, b) =>
+        new Date(b.shipment.date).getTime() - new Date(a.shipment.date).getTime()
+    );
+}
+
+export function getEmployeeStats(shipments: Shipment[], employeeName: string) {
+  const entries = getEmployeeShipmentEntries(shipments, employeeName);
+  return {
+    shipmentCount: entries.length,
+    totalPayout: entries.reduce((sum, entry) => sum + entry.payout, 0),
+  };
+}
+
+export function getMonthKey(date: string): string {
+  return date.slice(0, 7);
+}
+
+export function formatMonthLabel(monthKey: string): string {
+  const [year, month] = monthKey.split("-").map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString("en-PH", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+export function getMonthlyEarningsTotal(
+  entries: EmployeeShipmentEntry[],
+  monthKey: string
+): number {
+  return entries
+    .filter((entry) => getMonthKey(entry.shipment.date) === monthKey)
+    .reduce((sum, entry) => sum + entry.payout, 0);
+}
+
+export function calculatePayoutPreview(
+  routeName: string,
+  hasExtraHelper: boolean,
+  client = "Pepsi",
+  distanceBand?: string | null,
+  routeId?: string
+): PayoutPreview | null {
+  const result = calculateDestinationPayout({
+    client: client as DestinationClient,
+    routeName,
+    distance: distanceBand ?? "",
+    routeId,
+    hasExtraHelper,
+  });
+  if (!result) return null;
+
+  return {
+    driverRate: result.driverPayout,
+    helperRate: result.helperPayout,
+    extraHelperRate: result.extraHelperPayout,
+  };
+}
+
+export function getDriverPayoutForShipment(
+  farthestRoute: string,
+  client = "Pepsi",
+  distanceBand?: string | null
+): number {
+  return getPayoutForRole(farthestRoute, "Driver", client, distanceBand);
+}
+
+export function getHelperPayoutForShipment(
+  farthestRoute: string,
+  client = "Pepsi",
+  distanceBand?: string | null
+): number {
+  return getPayoutForRole(farthestRoute, "Helper", client, distanceBand);
+}
+
+export function getExtraHelperPayoutForShipment(
+  farthestRoute: string,
+  client = "Pepsi",
+  distanceBand?: string | null
+): number {
+  return getPayoutForRole(farthestRoute, "Extra Helper", client, distanceBand);
+}
+
+export function getShipmentTotalPayout(shipment: Shipment): number {
+  const driver = getPayoutForRole(
+    shipment.farthestRoute,
+    "Driver",
+    shipment.client,
+    shipment.distanceBand
+  );
+  const helper = getPayoutForRole(
+    shipment.farthestRoute,
+    "Helper",
+    shipment.client,
+    shipment.distanceBand
+  );
+  const extra = shipment.extraHelper
+    ? getPayoutForRole(
+        shipment.farthestRoute,
+        "Extra Helper",
+        shipment.client,
+        shipment.distanceBand
+      )
+    : 0;
+  return driver + helper + extra;
+}
