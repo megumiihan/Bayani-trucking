@@ -1,13 +1,16 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import type { ShipmentLog } from "@prisma/client";
 import { calculateDestinationPayout } from "@/lib/calculations";
 import { isDestinationClient } from "@/lib/clients";
+import { mapShipmentLogToShipment } from "@/lib/mappers/shipmentLog";
 import { prisma } from "@/lib/prisma";
 import {
   getDefaultRouteRate,
   type DestinationClient,
 } from "@/lib/rates";
+import type { Shipment } from "@/lib/mockData";
 
 /** Payload from the shipment input form. */
 export interface ShipmentFormInput {
@@ -165,6 +168,9 @@ export async function saveShipment(
       },
     });
 
+    revalidatePath("/");
+    revalidatePath("/employee/profile");
+
     return { success: true, record };
   } catch (error) {
     console.error("[saveShipment]", error);
@@ -174,6 +180,124 @@ export async function saveShipment(
         error instanceof Error
           ? error.message
           : "An unexpected error occurred while saving the shipment.",
+    };
+  }
+}
+
+export type ToggleShipmentFlagResult =
+  | { success: true; shipment: Shipment }
+  | { success: false; error: string };
+
+export async function toggleShipmentFlag(
+  id: string
+): Promise<ToggleShipmentFlagResult> {
+  try {
+    const current = await prisma.shipmentLog.findUnique({
+      where: { id },
+      select: { isFlagged: true },
+    });
+
+    if (!current) {
+      return { success: false, error: "Shipment not found." };
+    }
+
+    const updated = await prisma.shipmentLog.update({
+      where: { id },
+      data: { isFlagged: !current.isFlagged },
+      include: { client: { select: { name: true } } },
+    });
+
+    revalidatePath("/");
+    revalidatePath("/employee/profile");
+
+    return {
+      success: true,
+      shipment: mapShipmentLogToShipment(updated),
+    };
+  } catch (error) {
+    console.error("[toggleShipmentFlag]", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred while updating the shipment.",
+    };
+  }
+}
+
+
+export interface UpdateShipmentInput {
+  driver: string;
+  helper: string;
+  extraHelper?: string | null;
+  extraHelperNote?: string | null;
+  remarks?: string | null;
+  flagged: boolean;
+  approved: boolean;
+}
+
+export type UpdateShipmentResult =
+  | { success: true; shipment: Shipment }
+  | { success: false; error: string };
+
+function updateRemarks(input: UpdateShipmentInput): string | null {
+  const parts = [input.remarks?.trim(), input.extraHelperNote?.trim()].filter(
+    Boolean
+  ) as string[];
+  return parts.length > 0 ? parts.join("\n") : null;
+}
+
+export async function updateShipment(
+  id: string,
+  input: UpdateShipmentInput
+): Promise<UpdateShipmentResult> {
+  try {
+    const existing = await prisma.shipmentLog.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!existing) {
+      return { success: false, error: "Shipment not found." };
+    }
+
+    const [driverId, helperId] = await Promise.all([
+      resolveEmployeeId(input.driver),
+      input.helper ? resolveEmployeeId(input.helper) : Promise.resolve(null),
+    ]);
+
+    const updated = await prisma.shipmentLog.update({
+      where: { id },
+      data: {
+        driverName: input.driver,
+        driverId,
+        helperName: input.helper || null,
+        helperId,
+        extraHelperName: input.extraHelper || null,
+        hasExtraHelper: Boolean(input.extraHelper),
+        remarks: updateRemarks(input),
+        isFlagged: input.flagged,
+        isApproved: input.approved,
+      },
+      include: { client: { select: { name: true } } },
+    });
+
+    revalidatePath("/");
+    revalidatePath("/employee/profile");
+
+    return {
+      success: true,
+      shipment: mapShipmentLogToShipment(updated),
+    };
+  } catch (error) {
+    console.error("[updateShipment]", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred while updating the shipment.",
     };
   }
 }

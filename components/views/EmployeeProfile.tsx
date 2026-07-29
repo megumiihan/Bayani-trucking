@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import {
-  employees,
   formatCurrency,
   shipmentRoleColors,
   tenureStatusColors,
+  type Employee,
+  type Shipment,
 } from "@/lib/mockData";
 import {
   formatMonthLabel,
@@ -14,7 +15,6 @@ import {
   getMonthlyEarningsTotal,
   type EmployeeShipmentEntry,
 } from "@/lib/payout";
-import { useData } from "@/context/DataContext";
 import { useRole } from "@/context/RoleContext";
 import Badge from "@/components/ui/Badge";
 import PageHeader from "@/components/ui/PageHeader";
@@ -41,8 +41,17 @@ function getPreviousMonthKeys(count: number): string[] {
   return keys;
 }
 
-export default function EmployeeProfile() {
-  const { shipments } = useData();
+interface EmployeeProfileProps {
+  initialShipments: Shipment[];
+  initialEmployees: Employee[];
+}
+
+export default function EmployeeProfile({
+  initialShipments,
+  initialEmployees,
+}: EmployeeProfileProps) {
+  const [shipments] = useState(initialShipments);
+  const [employees] = useState(initialEmployees);
   const { currentEmployee, setCurrentEmployee } = useRole();
   const [monthFilter, setMonthFilter] = useState(ALL_MONTHS);
   const [clientFilter, setClientFilter] = useState(ALL_CLIENTS);

@@ -77,16 +77,23 @@ export function getEmployeePayoutForShipment(
   const role = getEmployeeRoleInShipment(shipment, employeeName);
   if (!role) return null;
 
-  return {
-    shipment,
-    role,
-    payout: getPayoutForRole(
+  let payout: number;
+  if (role === "Driver" && shipment.driverPayout != null) {
+    payout = shipment.driverPayout;
+  } else if (role === "Helper" && shipment.helperPayout != null) {
+    payout = shipment.helperPayout;
+  } else if (role === "Extra Helper" && shipment.extraHelperPayout != null) {
+    payout = shipment.extraHelperPayout;
+  } else {
+    payout = getPayoutForRole(
       shipment.farthestRoute,
       role,
       shipment.client,
       shipment.distanceBand
-    ),
-  };
+    );
+  }
+
+  return { shipment, role, payout };
 }
 
 export function getEmployeeShipmentEntries(
@@ -157,28 +164,45 @@ export function calculatePayoutPreview(
 export function getDriverPayoutForShipment(
   farthestRoute: string,
   client = "Pepsi",
-  distanceBand?: string | null
+  distanceBand?: string | null,
+  shipment?: Shipment
 ): number {
+  if (shipment?.driverPayout != null) return shipment.driverPayout;
   return getPayoutForRole(farthestRoute, "Driver", client, distanceBand);
 }
 
 export function getHelperPayoutForShipment(
   farthestRoute: string,
   client = "Pepsi",
-  distanceBand?: string | null
+  distanceBand?: string | null,
+  shipment?: Shipment
 ): number {
+  if (shipment?.helperPayout != null) return shipment.helperPayout;
   return getPayoutForRole(farthestRoute, "Helper", client, distanceBand);
 }
 
 export function getExtraHelperPayoutForShipment(
   farthestRoute: string,
   client = "Pepsi",
-  distanceBand?: string | null
+  distanceBand?: string | null,
+  shipment?: Shipment
 ): number {
+  if (shipment?.extraHelperPayout != null) return shipment.extraHelperPayout;
   return getPayoutForRole(farthestRoute, "Extra Helper", client, distanceBand);
 }
 
 export function getShipmentTotalPayout(shipment: Shipment): number {
+  if (
+    shipment.driverPayout != null &&
+    shipment.helperPayout != null
+  ) {
+    return (
+      shipment.driverPayout +
+      shipment.helperPayout +
+      (shipment.extraHelperPayout ?? 0)
+    );
+  }
+
   const driver = getPayoutForRole(
     shipment.farthestRoute,
     "Driver",

@@ -1,23 +1,10 @@
-"use client";
+import { getShipments } from "@/lib/queries/shipments";
+import HomePageClient from "@/components/views/HomePageClient";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useRole } from "@/context/RoleContext";
-import AdminMasterDashboard from "@/components/views/AdminMasterDashboard";
+export const dynamic = "force-dynamic";
 
-export default function HomePage() {
-  const { role } = useRole();
-  const router = useRouter();
+export default async function HomePage() {
+  const shipments = await getShipments();
 
-  useEffect(() => {
-    if (role === "employee") {
-      router.replace("/employee/shipments/new");
-    }
-  }, [role, router]);
-
-  if (role === "employee") {
-    return null;
-  }
-
-  return <AdminMasterDashboard />;
+  return <HomePageClient initialShipments={shipments} />;
 }

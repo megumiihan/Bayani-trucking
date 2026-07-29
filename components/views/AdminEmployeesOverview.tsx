@@ -3,19 +3,32 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRole } from "@/context/RoleContext";
-import { useData } from "@/context/DataContext";
 import {
   formatCurrency,
   tenureStatusColors,
   type Employee,
+  type Shipment,
 } from "@/lib/mockData";
 import { getEmployeeStats } from "@/lib/payout";
 import Badge from "@/components/ui/Badge";
 import PageHeader from "@/components/ui/PageHeader";
 
-export default function AdminEmployeesOverview() {
+interface AdminEmployeesOverviewProps {
+  initialEmployees: Employee[];
+  initialShipments: Shipment[];
+}
+
+export default function AdminEmployeesOverview({
+  initialEmployees,
+  initialShipments,
+}: AdminEmployeesOverviewProps) {
   const { role } = useRole();
-  const { employees, shipments, updateEmployee } = useData();
+  const [employees, setEmployees] = useState(initialEmployees);
+  const [shipments] = useState(initialShipments);
+
+  useEffect(() => {
+    setEmployees(initialEmployees);
+  }, [initialEmployees]);
 
   const sortedEmployees = useMemo(
     () =>
@@ -52,7 +65,11 @@ export default function AdminEmployeesOverview() {
               shipmentCount={stats.shipmentCount}
               totalPayout={stats.totalPayout}
               onSaveRemarks={(remarks) =>
-                updateEmployee(employee.id, { remarks })
+                setEmployees((current) =>
+                  current.map((entry) =>
+                    entry.id === employee.id ? { ...entry, remarks } : entry
+                  )
+                )
               }
             />
           );

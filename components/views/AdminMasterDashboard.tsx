@@ -1,8 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRole } from "@/context/RoleContext";
-import { useData } from "@/context/DataContext";
 import {
   formatCurrency,
   sortShipmentsByDateDesc,
@@ -20,17 +19,29 @@ import {
   type ShipmentFilters,
 } from "@/lib/shipmentFilters";
 import { exportShipmentsToExcel } from "@/lib/exportShipments";
+import { toggleShipmentFlag, updateShipment } from "@/lib/actions/shipment";
 import { getUserDisplayName } from "@/lib/mockUsers";
 import ShipmentFiltersBar from "@/components/admin/ShipmentFiltersBar";
 import EditShipmentModal from "@/components/admin/EditShipmentModal";
 import Badge from "@/components/ui/Badge";
 import PageHeader from "@/components/ui/PageHeader";
 
-export default function AdminMasterDashboard() {
+interface AdminMasterDashboardProps {
+  initialShipments: Shipment[];
+}
+
+export default function AdminMasterDashboard({
+  initialShipments,
+}: AdminMasterDashboardProps) {
   const { role } = useRole();
-  const { shipments, updateShipment, toggleShipmentFlag } = useData();
+  const [shipments, setShipments] = useState(initialShipments);
   const [filters, setFilters] = useState<ShipmentFilters>(defaultShipmentFilters);
   const [editingShipment, setEditingShipment] = useState<Shipment | null>(null);
+  const [flaggingId, setFlaggingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setShipments(initialShipments);
+  }, [initialShipments]);
 
   const clients = useMemo(() => getUniqueClients(shipments), [shipments]);
 
@@ -48,6 +59,45 @@ export default function AdminMasterDashboard() {
     () => filteredShipments.filter((s) => s.flagged).length,
     [filteredShipments]
   );
+
+  const handleToggleFlag = async (id: string) => {
+    if (flaggingId) return;
+
+    setFlaggingId(id);
+    const result = await toggleShipmentFlag(id);
+    setFlaggingId(null);
+
+    if (result.success) {
+      setShipments((current) =>
+        current.map((shipment) =>
+          shipment.id === id ? result.shipment : shipment
+        )
+      );
+    }
+  };
+
+  const handleUpdateShipment = async (
+    id: string,
+    updates: Partial<Shipment>
+  ) => {
+    const result = await updateShipment(id, {
+      driver: updates.driver ?? "",
+      helper: updates.helper ?? "",
+      extraHelper: updates.extraHelper,
+      extraHelperNote: updates.extraHelperNote,
+      remarks: updates.remarks,
+      flagged: updates.flagged ?? false,
+      approved: updates.approved ?? false,
+    });
+
+    if (result.success) {
+      setShipments((current) =>
+        current.map((shipment) =>
+          shipment.id === id ? result.shipment: shipment
+        )
+      );
+    }
+  };
 
   if (role !== "admin") {
     return (
@@ -98,7 +148,7 @@ export default function AdminMasterDashboard() {
           </div>
           <button
             type="button"
-            onClick={() => exportShipmentsToExcel(shipments)}
+            onClick={() => exportShipmentsToExcel(filteredShipments)}
             className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-800"
           >
             <svg
@@ -157,9 +207,10 @@ export default function AdminMasterDashboard() {
                   <MasterTableRow
                     key={shipment.id}
                     shipment={shipment}
-                    onToggleFlag={() => toggleShipmentFlag(shipment.id)}
+                    isFlagging={flaggingId === shipment.id}
+                    onToggleFlag={() => handleToggleFlag(shipment.id)}
                     onEdit={() => setEditingShipment(shipment)}
-                    onFlag={() => toggleShipmentFlag(shipment.id)}
+                    onFlag={() => handleToggleFlag(shipment.id)}
                   />
                 ))
               )}
@@ -171,7 +222,7 @@ export default function AdminMasterDashboard() {
       <EditShipmentModal
         shipment={editingShipment}
         onClose={() => setEditingShipment(null)}
-        onSave={updateShipment}
+        onSave={handleUpdateShipment}
       />
     </div>
   );
@@ -179,11 +230,13 @@ export default function AdminMasterDashboard() {
 
 function MasterTableRow({
   shipment,
+  isFlagging,
   onToggleFlag,
   onEdit,
   onFlag,
 }: {
   shipment: Shipment;
+  isFlagging: boolean;
   onToggleFlag: () => void;
   onEdit: () => void;
   onFlag: () => void;
@@ -191,12 +244,14 @@ function MasterTableRow({
   const driverRate = getDriverPayoutForShipment(
     shipment.farthestRoute,
     shipment.client,
-    shipment.distanceBand
+    shipment.distanceBand,
+    shipment
   );
   const helperRate = getHelperPayoutForShipment(
     shipment.farthestRoute,
     shipment.client,
-    shipment.distanceBand
+    shipment.distanceBand,
+    shipment
   );
 
   return (
@@ -209,8 +264,9 @@ function MasterTableRow({
         <button
           type="button"
           onClick={onToggleFlag}
+          disabled={isFlagging}
           aria-label={shipment.flagged ? "Unflag shipment" : "Flag shipment"}
-          className={`rounded p-1 transition-colors ${
+          className={`rounded p-1 transition-colors disabled:opacity-50 ${
             shipment.flagged
               ? "text-amber-500 hover:text-amber-600"
               : "text-gray-300 hover:text-amber-400"
@@ -284,9 +340,6 @@ function MasterTableRow({
         <p className="font-medium text-gray-900">
           {getUserDisplayName(shipment.uploadedByUserId)}
         </p>
-        <p className="font-mono text-xs text-gray-400">
-          {shipment.uploadedByUserId}
-        </p>
       </td>
       <td className="max-w-xs truncate border-r border-gray-100 px-3 py-3 text-gray-500">
         {shipment.remarks || "—"}
@@ -303,7 +356,8 @@ function MasterTableRow({
           <button
             type="button"
             onClick={onFlag}
-            className="rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100"
+            disabled={isFlagging}
+            className="rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-50"
           >
             {shipment.flagged ? "Unflag" : "Flag"}
           </button>

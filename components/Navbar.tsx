@@ -40,7 +40,6 @@ export default function Navbar() {
           </div>
           <div className="leading-tight">
             <p className="text-sm font-bold text-gray-900">Bayani Trucking</p>
-            <p className="text-xs text-gray-500">Delivery Management</p>
           </div>
         </Link>
 

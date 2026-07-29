@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRole } from "@/context/RoleContext";
-import { useData } from "@/context/DataContext";
 import {
   formatCurrency,
   payoutStatusColors,
   shipmentRoleColors,
   tenureStatusColors,
+  type Employee,
+  type Shipment,
 } from "@/lib/mockData";
 import {
   getEmployeeShipmentEntries,
@@ -19,32 +20,32 @@ import Badge from "@/components/ui/Badge";
 import PageHeader from "@/components/ui/PageHeader";
 
 interface AdminEmployeeDetailProps {
-  employeeId: string;
+  employee: Employee;
+  initialShipments: Shipment[];
 }
 
-export default function AdminEmployeeDetail({ employeeId }: AdminEmployeeDetailProps) {
+export default function AdminEmployeeDetail({
+  employee,
+  initialShipments,
+}: AdminEmployeeDetailProps) {
   const { role } = useRole();
-  const { employees, shipments, updateEmployee } = useData();
-  const employee = employees.find((e) => e.id === employeeId);
-
-  const [remarks, setRemarks] = useState(employee?.remarks ?? "");
+  const [shipments] = useState(initialShipments);
+  const [remarks, setRemarks] = useState(employee.remarks);
   const [isDirty, setIsDirty] = useState(false);
 
   const entries = useMemo(
-    () => (employee ? getEmployeeShipmentEntries(shipments, employee.name) : []),
-    [employee, shipments]
+    () => getEmployeeShipmentEntries(shipments, employee.name),
+    [employee.name, shipments]
   );
 
   const stats = useMemo(
-    () => (employee ? getEmployeeStats(shipments, employee.name) : null),
-    [employee, shipments]
+    () => getEmployeeStats(shipments, employee.name),
+    [employee.name, shipments]
   );
 
   useEffect(() => {
-    if (employee) {
-      setRemarks(employee.remarks);
-      setIsDirty(false);
-    }
+    setRemarks(employee.remarks);
+    setIsDirty(false);
   }, [employee]);
 
   if (role !== "admin") {
@@ -55,22 +56,7 @@ export default function AdminEmployeeDetail({ employeeId }: AdminEmployeeDetailP
     );
   }
 
-  if (!employee) {
-    return (
-      <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
-        <p className="text-gray-600">Employee not found.</p>
-        <Link
-          href="/admin/employees"
-          className="mt-4 inline-block text-sm font-medium text-blue-700 hover:underline"
-        >
-          ← Back to Employee Overview
-        </Link>
-      </div>
-    );
-  }
-
   const handleSaveRemarks = () => {
-    updateEmployee(employee.id, { remarks });
     setIsDirty(false);
   };
 

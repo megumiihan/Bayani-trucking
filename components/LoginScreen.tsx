@@ -23,7 +23,7 @@ export default function LoginScreen() {
             Bayani Trucking
           </h1>
           <p className="mt-2 text-sm text-gray-500">
-            Sign in to access the delivery management system
+            Sign in
           </p>
         </div>
 

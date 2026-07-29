@@ -29,20 +29,23 @@ function shipmentToMasterRow(shipment: Shipment) {
     "Driver Rate": getDriverPayoutForShipment(
       shipment.farthestRoute,
       shipment.client,
-      shipment.distanceBand
+      shipment.distanceBand,
+      shipment
     ),
     Helper: shipment.helper,
     "Helper Rate": getHelperPayoutForShipment(
       shipment.farthestRoute,
       shipment.client,
-      shipment.distanceBand
+      shipment.distanceBand,
+      shipment
     ),
     "Extra Helper": shipment.extraHelper ?? "",
     "Extra Helper Rate": shipment.extraHelper
       ? getExtraHelperPayoutForShipment(
           shipment.farthestRoute,
           shipment.client,
-          shipment.distanceBand
+          shipment.distanceBand,
+          shipment
         )
       : 0,
     "Extra Helper Note": shipment.extraHelperNote ?? "",

@@ -1,0 +1,225 @@
+import { PrismaClient, type EmployeeRole } from "@prisma/client";
+import { calculateDestinationPayout } from "../lib/calculations";
+import { clients, toPrismaCalculationType } from "../lib/clients";
+import { employees, shipments } from "../lib/mockData";
+import { resolveShipmentRate, destinationRates, type DestinationClient } from "../lib/rates";
+import { trucks } from "../lib/trucks";
+
+const prisma = new PrismaClient();
+
+const DISTANCE_BAND_ORDER = ["1-120KM", "121-200KM", "201-260KM", ""];
+
+function toPrismaEmployeeRole(role: "Driver" | "Helper"): EmployeeRole {
+  return role === "Driver" ? "DRIVER" : "HELPER";
+}
+
+/** One row per client + routeName (matches Prisma @@unique and getDefaultRouteRate). */
+function dedupeDestinationRoutes() {
+  const byKey = new Map<string, (typeof destinationRates)[number]>();
+
+  for (const rate of destinationRates) {
+    const key = `${rate.client}::${rate.routeName}`;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, rate);
+      continue;
+    }
+
+    const existingIdx = DISTANCE_BAND_ORDER.indexOf(existing.distance);
+    const nextIdx = DISTANCE_BAND_ORDER.indexOf(rate.distance);
+    if (
+      nextIdx < existingIdx ||
+      (existingIdx === -1 && nextIdx >= 0)
+    ) {
+      byKey.set(key, rate);
+    }
+  }
+
+  return Array.from(byKey.values());
+}
+
+async function main() {
+  console.log("Clearing existing data…");
+  await prisma.shipmentLog.deleteMany();
+  await prisma.destinationRoute.deleteMany();
+  await prisma.client.deleteMany();
+  await prisma.employee.deleteMany();
+  await prisma.truck.deleteMany();
+
+  console.log("Seeding clients…");
+  const clientIdByName = new Map<string, string>();
+  for (const client of clients) {
+    const record = await prisma.client.create({
+      data: {
+        name: client.name,
+        calcType: toPrismaCalculationType(client.calculationType),
+      },
+    });
+    clientIdByName.set(record.name, record.id);
+  }
+  console.log(`  ${clients.length} clients`);
+
+  console.log("Seeding employees…");
+  for (const employee of employees) {
+    await prisma.employee.create({
+      data: {
+        fullName: employee.name,
+        role: toPrismaEmployeeRole(employee.role),
+        isActive: employee.tenureStatus !== "inactive",
+      },
+    });
+  }
+  console.log(`  ${employees.length} employees`);
+
+  console.log("Seeding trucks…");
+  for (const truck of trucks) {
+    await prisma.truck.create({
+      data: {
+        mvFileNo: truck.mvFileNo,
+        plateNumber: truck.plateNumber,
+        engineNo: truck.engineNo,
+        chassisNo: truck.chassisNo,
+        yearModel: truck.yearModel,
+        make: truck.make,
+        wheelCount: truck.wheelCount,
+        truckType: truck.truckType,
+        crIssueDate: new Date(truck.crIssueDate),
+        firstRegistrationDate: new Date(truck.firstRegistrationDate),
+        isActive: truck.isActive,
+      },
+    });
+  }
+  console.log(`  ${trucks.length} trucks`);
+
+  const routes = dedupeDestinationRoutes();
+  console.log("Seeding destination routes…");
+  for (const rate of routes) {
+    const clientId = clientIdByName.get(rate.client);
+    if (!clientId) continue;
+
+    await prisma.destinationRoute.create({
+      data: {
+        clientId,
+        routeName: rate.routeName,
+        distance: rate.distance || null,
+        driverBaseRate: rate.driverBaseRate,
+        helperBaseRate: rate.helperBaseRate,
+      },
+    });
+  }
+  console.log(`  ${routes.length} routes`);
+
+  console.log("Seeding mock shipments…");
+  const [dbEmployees, dbTrucks] = await Promise.all([
+    prisma.employee.findMany({ select: { id: true, fullName: true } }),
+    prisma.truck.findMany({ select: { id: true, plateNumber: true } }),
+  ]);
+
+  const employeeIdByName = new Map(
+    dbEmployees.map((employee) => [employee.fullName, employee.id])
+  );
+  const truckIdByPlate = new Map(
+    dbTrucks.map((truck) => [truck.plateNumber, truck.id])
+  );
+
+  let seededShipments = 0;
+  for (const shipment of shipments) {
+    const clientId = clientIdByName.get(shipment.client);
+    if (!clientId) {
+      console.warn(`  Skipping ${shipment.shipmentNumber}: unknown client`);
+      continue;
+    }
+
+    const rate = resolveShipmentRate(
+      shipment.client,
+      shipment.farthestRoute,
+      shipment.distanceBand
+    );
+    if (!rate) {
+      console.warn(
+        `  Skipping ${shipment.shipmentNumber}: no rate for ${shipment.farthestRoute}`
+      );
+      continue;
+    }
+
+    const payout = calculateDestinationPayout({
+      client: shipment.client as DestinationClient,
+      routeName: shipment.farthestRoute,
+      distance: rate.distance,
+      hasExtraHelper: Boolean(shipment.extraHelper),
+    });
+    if (!payout) {
+      console.warn(`  Skipping ${shipment.shipmentNumber}: payout calculation failed`);
+      continue;
+    }
+
+    const remarkParts = [shipment.remarks?.trim(), shipment.extraHelperNote?.trim()].filter(
+      Boolean
+    ) as string[];
+
+    await prisma.shipmentLog.create({
+      data: {
+        id: shipment.id,
+        date: new Date(shipment.date),
+        plateNumber: shipment.plateNumber,
+        truckId: truckIdByPlate.get(shipment.plateNumber) ?? null,
+        shipmentNumber: shipment.shipmentNumber,
+        clientNumber: shipment.clientNumber || null,
+        waybillNumber: shipment.waybillNumber || null,
+        routeName: rate.routeName,
+        distance: rate.distance || null,
+        driverName: shipment.driver,
+        driverId: employeeIdByName.get(shipment.driver) ?? null,
+        helperName: shipment.helper || null,
+        helperId: shipment.helper
+          ? (employeeIdByName.get(shipment.helper) ?? null)
+          : null,
+        hasExtraHelper: Boolean(shipment.extraHelper),
+        extraHelperName: shipment.extraHelper,
+        driverPayout: payout.driverPayout,
+        helperPayout: payout.helperPayout,
+        extraHelperPayout: payout.extraHelperPayout,
+        remarks: remarkParts.length > 0 ? remarkParts.join("\n") : null,
+        isFlagged: shipment.flagged,
+        isApproved: shipment.approved,
+        clientId,
+        createdById: shipment.uploadedByUserId,
+      },
+    });
+    seededShipments += 1;
+  }
+  console.log(`  ${seededShipments} shipments`);
+
+  const [clientCount, employeeCount, truckCount, routeCount, shipmentCount] =
+    await Promise.all([
+      prisma.client.count(),
+      prisma.employee.count(),
+      prisma.truck.count(),
+      prisma.destinationRoute.count(),
+      prisma.shipmentLog.count(),
+    ]);
+
+  console.log("\nSeed complete:");
+  console.log(
+    JSON.stringify(
+      {
+        clients: clientCount,
+        employees: employeeCount,
+        trucks: truckCount,
+        routes: routeCount,
+        shipments: shipmentCount,
+      },
+      null,
+      2
+    )
+  );
+}
+
+main()
+  .catch((error) => {
+    console.error("Seed failed:", error);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

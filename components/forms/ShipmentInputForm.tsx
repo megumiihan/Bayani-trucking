@@ -1,13 +1,9 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
-import {
-  employees,
-  trucks,
-  formatCurrency,
-  type Shipment,
-} from "@/lib/mockData";
-import { getTruckById, formatTruckLabel } from "@/lib/trucks";
+import { useRouter } from "next/navigation";
+import { formatCurrency, type Employee } from "@/lib/mockData";
+import { formatTruckLabel, type Truck } from "@/lib/trucks";
 import {
   clients,
   getClientByName,
@@ -21,7 +17,6 @@ import {
 } from "@/lib/rates";
 import { calculateDestinationPayout } from "@/lib/calculations";
 import { saveShipment } from "@/lib/actions/shipment";
-import { useData } from "@/context/DataContext";
 import { useRole } from "@/context/RoleContext";
 import PageHeader from "@/components/ui/PageHeader";
 import SearchableSelect from "@/components/ui/SearchableSelect";
@@ -49,16 +44,42 @@ const initialForm = {
   remarks: "",
 };
 
-const drivers = employees.filter((e) => e.role === "Driver");
-const helpers = employees.filter((e) => e.role === "Helper");
+interface ShipmentInputFormProps {
+  employees: Employee[];
+  trucks: Truck[];
+}
 
-export default function ShipmentInputForm() {
-  const { addShipment } = useData();
+export default function ShipmentInputForm({
+  employees,
+  trucks,
+}: ShipmentInputFormProps) {
+  const router = useRouter();
   const { currentUserId } = useRole();
   const [form, setForm] = useState(initialForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const drivers = useMemo(
+    () =>
+      employees.filter(
+        (employee) => employee.role === "Driver" && employee.tenureStatus !== "inactive"
+      ),
+    [employees]
+  );
+
+  const helpers = useMemo(
+    () =>
+      employees.filter(
+        (employee) => employee.role === "Helper" && employee.tenureStatus !== "inactive"
+      ),
+    [employees]
+  );
+
+  const activeTrucks = useMemo(
+    () => trucks.filter((truck) => truck.isActive),
+    [trucks]
+  );
 
   const selectedClient = getClientByName(form.client);
   const usesDestinationRates = isDestinationClient(form.client);
@@ -106,7 +127,7 @@ export default function ShipmentInputForm() {
   };
 
   const handleTruckChange = (truckId: string) => {
-    const truck = getTruckById(truckId);
+    const truck = trucks.find((entry) => entry.id === truckId);
     if (!truck) return;
 
     setForm((current) => ({
@@ -162,34 +183,9 @@ export default function ShipmentInputForm() {
       return;
     }
 
-    const { record } = result;
-
-    // Keep admin dashboard in sync until it reads from the database.
-    const shipment: Shipment = {
-      id: record.id,
-      date: record.date.toISOString().slice(0, 10),
-      plateNumber: record.plateNumber,
-      truckId: record.truckId,
-      client: form.client,
-      shipmentNumber: record.shipmentNumber,
-      clientNumber: record.clientNumber ?? form.clientNumber,
-      waybillNumber: record.waybillNumber ?? "",
-      farthestRoute: record.routeName ?? form.farthestRoute,
-      distanceBand: record.distance,
-      driver: record.driverName,
-      helper: record.helperName ?? "",
-      extraHelper: record.extraHelperName,
-      extraHelperNote: form.hasExtraHelper ? form.extraHelperNote || null : null,
-      remarks: record.remarks ?? "",
-      payoutStatus: "Pending",
-      flagged: record.isFlagged,
-      approved: false,
-      uploadedByUserId: record.createdById,
-    };
-
-    addShipment(shipment);
     setShowSuccess(true);
     setForm({ ...initialForm, date: todayISO() });
+    router.refresh();
 
     window.scrollTo({ top: 0, behavior: "smooth" });
     setTimeout(() => setShowSuccess(false), 5000);
@@ -276,7 +272,7 @@ export default function ShipmentInputForm() {
                   className={inputClass}
                 >
                   <option value="">Select truck</option>
-                  {trucks.filter((t) => t.isActive).map((truck) => (
+                  {activeTrucks.map((truck) => (
                     <option key={truck.id} value={truck.id}>
                       {formatTruckLabel(truck)}
                     </option>

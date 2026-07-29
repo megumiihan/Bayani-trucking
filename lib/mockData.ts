@@ -42,6 +42,10 @@ export interface Shipment {
   flagged: boolean;
   approved: boolean;
   uploadedByUserId: string;
+  /** Stored payout snapshots from the database (when loaded from ShipmentLog). */
+  driverPayout?: number;
+  helperPayout?: number;
+  extraHelperPayout?: number;
 }
 
 export interface RouteRate {
