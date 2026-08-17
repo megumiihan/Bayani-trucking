@@ -5,6 +5,7 @@ import type { ShipmentLog } from "@prisma/client";
 import { calculateDestinationPayout } from "@/lib/calculations";
 import { isDestinationClient } from "@/lib/clients";
 import { mapShipmentLogToShipment } from "@/lib/mappers/shipmentLog";
+import { trimOrNull } from "@/lib/mappers/shipmentRemarks";
 import { prisma } from "@/lib/prisma";
 import {
   getDefaultRouteRate,
@@ -73,10 +74,7 @@ async function resolveEmployeeId(fullName: string): Promise<string | null> {
 }
 
 function buildRemarks(input: ShipmentFormInput): string | null {
-  const parts = [input.remarks?.trim(), input.extraHelperNote?.trim()].filter(
-    Boolean
-  ) as string[];
-  return parts.length > 0 ? parts.join("\n") : null;
+  return trimOrNull(input.remarks);
 }
 
 export async function saveShipment(
@@ -157,6 +155,9 @@ export async function saveShipment(
         helperId,
         hasExtraHelper: input.hasExtraHelper,
         extraHelperName: input.hasExtraHelper ? input.extraHelper || null : null,
+        extraHelperNote: input.hasExtraHelper
+          ? trimOrNull(input.extraHelperNote)
+          : null,
         isDriverAsHelper: false,
         driverPayout: payout.driverPayout,
         helperPayout: payout.helperPayout,
@@ -242,10 +243,7 @@ export type UpdateShipmentResult =
   | { success: false; error: string };
 
 function updateRemarks(input: UpdateShipmentInput): string | null {
-  const parts = [input.remarks?.trim(), input.extraHelperNote?.trim()].filter(
-    Boolean
-  ) as string[];
-  return parts.length > 0 ? parts.join("\n") : null;
+  return trimOrNull(input.remarks);
 }
 
 export async function updateShipment(
@@ -276,6 +274,9 @@ export async function updateShipment(
         helperId,
         extraHelperName: input.extraHelper || null,
         hasExtraHelper: Boolean(input.extraHelper),
+        extraHelperNote: input.extraHelper
+          ? trimOrNull(input.extraHelperNote)
+          : null,
         remarks: updateRemarks(input),
         isFlagged: input.flagged,
         isApproved: input.approved,

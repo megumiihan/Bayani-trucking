@@ -16,6 +16,7 @@ model Employee {
   fullName  String
   role      EmployeeRole // DRIVER, HELPER, BOTH
   isActive  Boolean      @default(true) // Set to false if they resign
+  remarks   String?
   createdAt DateTime     @default(now())
 
   // Optional: Allows querying all shipments completed by this employee
@@ -111,6 +112,7 @@ model ShipmentLog {
 
   hasExtraHelper   Boolean @default(false)
   extraHelperName  String?
+  extraHelperNote  String?
   isDriverAsHelper Boolean @default(false)
 
   // --- Financial Snapshot ---

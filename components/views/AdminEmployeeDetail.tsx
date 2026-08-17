@@ -11,6 +11,7 @@ import {
   type Employee,
   type Shipment,
 } from "@/lib/mockData";
+import { updateEmployeeRemarks } from "@/lib/actions/employee";
 import {
   getEmployeeShipmentEntries,
   getEmployeeStats,
@@ -32,6 +33,8 @@ export default function AdminEmployeeDetail({
   const [shipments] = useState(initialShipments);
   const [remarks, setRemarks] = useState(employee.remarks);
   const [isDirty, setIsDirty] = useState(false);
+  const [isSavingRemarks, setIsSavingRemarks] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const entries = useMemo(
     () => getEmployeeShipmentEntries(shipments, employee.name),
@@ -56,8 +59,20 @@ export default function AdminEmployeeDetail({
     );
   }
 
-  const handleSaveRemarks = () => {
-    setIsDirty(false);
+  const handleSaveRemarks = async () => {
+    setIsSavingRemarks(true);
+    setSaveError(null);
+
+    const result = await updateEmployeeRemarks(employee.id, remarks);
+    setIsSavingRemarks(false);
+
+    if (result.success) {
+      setRemarks(result.employee.remarks);
+      setIsDirty(false);
+      return;
+    }
+
+    setSaveError(result.error);
   };
 
   return (
@@ -107,17 +122,22 @@ export default function AdminEmployeeDetail({
               onChange={(e) => {
                 setRemarks(e.target.value);
                 setIsDirty(true);
+                setSaveError(null);
               }}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             />
           </label>
+          {saveError && (
+            <p className="mt-2 text-sm text-red-600">{saveError}</p>
+          )}
           {isDirty && (
             <button
               type="button"
               onClick={handleSaveRemarks}
-              className="mt-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+              disabled={isSavingRemarks}
+              className="mt-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
             >
-              Save Remarks
+              {isSavingRemarks ? "Saving…" : "Save Remarks"}
             </button>
           )}
         </div>

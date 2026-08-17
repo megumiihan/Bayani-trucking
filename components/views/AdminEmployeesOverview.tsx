@@ -10,6 +10,7 @@ import {
   type Shipment,
 } from "@/lib/mockData";
 import { getEmployeeStats } from "@/lib/payout";
+import { updateEmployeeRemarks } from "@/lib/actions/employee";
 import Badge from "@/components/ui/Badge";
 import PageHeader from "@/components/ui/PageHeader";
 
@@ -47,6 +48,16 @@ export default function AdminEmployeesOverview({
     );
   }
 
+  const handleSaveEmployeeRemarks = async (id: string, remarks: string) => {
+    const result = await updateEmployeeRemarks(id, remarks);
+    if (result.success) {
+      setEmployees((current) =>
+        current.map((entry) => (entry.id === id ? result.employee : entry))
+      );
+    }
+    return result;
+  };
+
   return (
     <div>
       <PageHeader
@@ -65,11 +76,7 @@ export default function AdminEmployeesOverview({
               shipmentCount={stats.shipmentCount}
               totalPayout={stats.totalPayout}
               onSaveRemarks={(remarks) =>
-                setEmployees((current) =>
-                  current.map((entry) =>
-                    entry.id === employee.id ? { ...entry, remarks } : entry
-                  )
-                )
+                handleSaveEmployeeRemarks(employee.id, remarks)
               }
             />
           );
@@ -78,6 +85,10 @@ export default function AdminEmployeesOverview({
     </div>
   );
 }
+
+type UpdateEmployeeRemarksResult = Awaited<
+  ReturnType<typeof updateEmployeeRemarks>
+>;
 
 function EmployeeCard({
   employee,
@@ -88,19 +99,33 @@ function EmployeeCard({
   employee: Employee;
   shipmentCount: number;
   totalPayout: number;
-  onSaveRemarks: (remarks: string) => void;
+  onSaveRemarks: (remarks: string) => Promise<UpdateEmployeeRemarksResult>;
 }) {
   const [remarks, setRemarks] = useState(employee.remarks);
   const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     setRemarks(employee.remarks);
     setIsDirty(false);
+    setSaveError(null);
   }, [employee.remarks]);
 
-  const handleSave = () => {
-    onSaveRemarks(remarks);
-    setIsDirty(false);
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveError(null);
+
+    const result = await onSaveRemarks(remarks);
+    setIsSaving(false);
+
+    if (result.success) {
+      setRemarks(result.employee.remarks);
+      setIsDirty(false);
+      return;
+    }
+
+    setSaveError(result.error);
   };
 
   return (
@@ -146,18 +171,23 @@ function EmployeeCard({
             onChange={(e) => {
               setRemarks(e.target.value);
               setIsDirty(true);
+              setSaveError(null);
             }}
             placeholder="Notes for operations reference..."
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           />
         </label>
+        {saveError && (
+          <p className="mt-2 text-xs text-red-600">{saveError}</p>
+        )}
         {isDirty && (
           <button
             type="button"
             onClick={handleSave}
-            className="mt-2 rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800"
+            disabled={isSaving}
+            className="mt-2 rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
           >
-            Save Remarks
+            {isSaving ? "Saving…" : "Save Remarks"}
           </button>
         )}
       </div>

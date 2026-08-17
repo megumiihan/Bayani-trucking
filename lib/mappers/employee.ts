@@ -21,6 +21,6 @@ export function mapEmployeeToUi(record: DbEmployee): Employee {
     emergencyContactRelationship: "",
     emergencyContactPhone: null,
     tenureStatus: record.isActive ? "new" : "inactive",
-    remarks: "",
+    remarks: record.remarks ?? "",
   };
 }

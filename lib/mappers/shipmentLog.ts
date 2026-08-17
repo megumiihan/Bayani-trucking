@@ -1,5 +1,6 @@
 import type { ShipmentLog, Client } from "@prisma/client";
 import type { Shipment } from "@/lib/mockData";
+import { resolveShipmentRemarkFields } from "@/lib/mappers/shipmentRemarks";
 
 type ShipmentLogWithClient = ShipmentLog & {
   client: Pick<Client, "name">;
@@ -8,6 +9,8 @@ type ShipmentLogWithClient = ShipmentLog & {
 export function mapShipmentLogToShipment(
   record: ShipmentLogWithClient
 ): Shipment {
+  const { remarks, extraHelperNote } = resolveShipmentRemarkFields(record);
+
   return {
     id: record.id,
     date: record.date.toISOString().slice(0, 10),
@@ -22,8 +25,8 @@ export function mapShipmentLogToShipment(
     driver: record.driverName,
     helper: record.helperName ?? "",
     extraHelper: record.extraHelperName,
-    extraHelperNote: null,
-    remarks: record.remarks ?? "",
+    extraHelperNote,
+    remarks,
     payoutStatus: "Pending",
     flagged: record.isFlagged,
     approved: record.isApproved,

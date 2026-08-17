@@ -4,6 +4,7 @@ import { clients, toPrismaCalculationType } from "../lib/clients";
 import { employees, shipments } from "../lib/mockData";
 import { resolveShipmentRate, destinationRates, type DestinationClient } from "../lib/rates";
 import { trucks } from "../lib/trucks";
+import { trimOrNull } from "../lib/mappers/shipmentRemarks";
 
 const prisma = new PrismaClient();
 
@@ -66,6 +67,7 @@ async function main() {
         fullName: employee.name,
         role: toPrismaEmployeeRole(employee.role),
         isActive: employee.tenureStatus !== "inactive",
+        remarks: trimOrNull(employee.remarks),
       },
     });
   }
@@ -153,10 +155,6 @@ async function main() {
       continue;
     }
 
-    const remarkParts = [shipment.remarks?.trim(), shipment.extraHelperNote?.trim()].filter(
-      Boolean
-    ) as string[];
-
     await prisma.shipmentLog.create({
       data: {
         id: shipment.id,
@@ -176,10 +174,13 @@ async function main() {
           : null,
         hasExtraHelper: Boolean(shipment.extraHelper),
         extraHelperName: shipment.extraHelper,
+        extraHelperNote: shipment.extraHelper
+          ? shipment.extraHelperNote?.trim() || null
+          : null,
         driverPayout: payout.driverPayout,
         helperPayout: payout.helperPayout,
         extraHelperPayout: payout.extraHelperPayout,
-        remarks: remarkParts.length > 0 ? remarkParts.join("\n") : null,
+        remarks: shipment.remarks?.trim() || null,
         isFlagged: shipment.flagged,
         isApproved: shipment.approved,
         clientId,
