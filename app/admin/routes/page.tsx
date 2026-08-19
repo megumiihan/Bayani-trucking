@@ -1,8 +1,11 @@
-import { destinationRates } from "@/lib/rates";
+import { getDestinationRoutes } from "@/lib/queries/routes";
 import { formatCurrency } from "@/lib/mockData";
 import PageHeader from "@/components/ui/PageHeader";
 
-export default function RoutesPage() {
+export const dynamic = "force-dynamic";
+
+export default async function RoutesPage() {
+  const destinationRates = await getDestinationRoutes();
   const clients = Array.from(new Set(destinationRates.map((r) => r.client)));
 
   return (

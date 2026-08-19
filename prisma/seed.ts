@@ -8,35 +8,8 @@ import { trimOrNull } from "../lib/mappers/shipmentRemarks";
 
 const prisma = new PrismaClient();
 
-const DISTANCE_BAND_ORDER = ["1-120KM", "121-200KM", "201-260KM", ""];
-
 function toPrismaEmployeeRole(role: "Driver" | "Helper"): EmployeeRole {
   return role === "Driver" ? "DRIVER" : "HELPER";
-}
-
-/** One row per client + routeName (matches Prisma @@unique and getDefaultRouteRate). */
-function dedupeDestinationRoutes() {
-  const byKey = new Map<string, (typeof destinationRates)[number]>();
-
-  for (const rate of destinationRates) {
-    const key = `${rate.client}::${rate.routeName}`;
-    const existing = byKey.get(key);
-    if (!existing) {
-      byKey.set(key, rate);
-      continue;
-    }
-
-    const existingIdx = DISTANCE_BAND_ORDER.indexOf(existing.distance);
-    const nextIdx = DISTANCE_BAND_ORDER.indexOf(rate.distance);
-    if (
-      nextIdx < existingIdx ||
-      (existingIdx === -1 && nextIdx >= 0)
-    ) {
-      byKey.set(key, rate);
-    }
-  }
-
-  return Array.from(byKey.values());
 }
 
 async function main() {
@@ -93,9 +66,9 @@ async function main() {
   }
   console.log(`  ${trucks.length} trucks`);
 
-  const routes = dedupeDestinationRoutes();
   console.log("Seeding destination routes…");
-  for (const rate of routes) {
+  let seededRoutes = 0;
+  for (const rate of destinationRates) {
     const clientId = clientIdByName.get(rate.client);
     if (!clientId) continue;
 
@@ -103,13 +76,15 @@ async function main() {
       data: {
         clientId,
         routeName: rate.routeName,
-        distance: rate.distance || null,
+        distance: rate.distance,
         driverBaseRate: rate.driverBaseRate,
         helperBaseRate: rate.helperBaseRate,
+        extraHelperBaseRate: rate.extraHelperBaseRate,
       },
     });
+    seededRoutes += 1;
   }
-  console.log(`  ${routes.length} routes`);
+  console.log(`  ${seededRoutes} routes`);
 
   console.log("Seeding mock shipments…");
   const [dbEmployees, dbTrucks] = await Promise.all([

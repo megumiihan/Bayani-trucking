@@ -39,7 +39,7 @@ export const destinationRates: DestinationRouteRate[] = [
   description: formatRouteDescription(rate),
 }));
 
-function formatRouteDescription(rate: DestinationRouteRate): string {
+export function formatRouteDescription(rate: DestinationRouteRate): string {
   if (rate.distance) {
     return `${rate.routeName} (${rate.distance})`;
   }

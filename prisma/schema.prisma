@@ -8,6 +8,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  //directUrl = env("DIRECT_URL")
 }
 
 // 1. EMPLOYEES TABLE (Master list of drivers & helpers)
@@ -69,16 +70,18 @@ enum CalculationType {
 
 // 4. ROUTE MASTER RATES
 model DestinationRoute {
-  id             String   @id @default(uuid())
-  clientId       String
-  client         Client   @relation(fields: [clientId], references: [id])
-  routeName      String
-  distance       String?
-  driverBaseRate Float
-  helperBaseRate Float
-  createdAt      DateTime @default(now())
+  id                  String   @id @default(uuid())
+  clientId            String
+  client              Client   @relation(fields: [clientId], references: [id])
+  routeName           String
+  /// Distance band, e.g. "1-120KM". Empty string for clients priced per area.
+  distance            String   @default("")
+  driverBaseRate      Float
+  helperBaseRate      Float
+  extraHelperBaseRate Float
+  createdAt           DateTime @default(now())
 
-  @@unique([clientId, routeName])
+  @@unique([clientId, routeName, distance])
 }
 
 // 5. SHIPMENT LOGS (Transactional Event)
