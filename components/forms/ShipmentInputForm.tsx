@@ -5,10 +5,9 @@ import { useRouter } from "next/navigation";
 import { formatCurrency, type Employee } from "@/lib/mockData";
 import { formatTruckLabel, type Truck } from "@/lib/trucks";
 import {
-  clients,
-  getClientByName,
   getCalculationTypeLabel,
   isDestinationClient,
+  type Client,
 } from "@/lib/clients";
 import {
   getUniqueRouteNamesForClient,
@@ -25,36 +24,39 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-const defaultClient = clients[0];
-
-const initialForm = {
-  date: todayISO(),
-  truckId: "",
-  plateNumber: "",
-  client: defaultClient.name,
-  shipmentNumber: "",
-  clientNumber: defaultClient.id,
-  waybillNumber: "",
-  farthestRoute: "",
-  driver: "",
-  helper: "",
-  hasExtraHelper: false,
-  extraHelper: "",
-  extraHelperNote: "",
-  remarks: "",
-};
-
 interface ShipmentInputFormProps {
   employees: Employee[];
   trucks: Truck[];
+  clients: Client[];
 }
 
 export default function ShipmentInputForm({
   employees,
   trucks,
+  clients,
 }: ShipmentInputFormProps) {
   const router = useRouter();
   const { currentUserId } = useRole();
+
+  const defaultClient = clients[0];
+
+  const initialForm = {
+    date: todayISO(),
+    truckId: "",
+    plateNumber: "",
+    client: defaultClient?.name ?? "",
+    shipmentNumber: "",
+    clientNumber: defaultClient?.id ?? "",
+    waybillNumber: "",
+    farthestRoute: "",
+    driver: "",
+    helper: "",
+    hasExtraHelper: false,
+    extraHelper: "",
+    extraHelperNote: "",
+    remarks: "",
+  };
+
   const [form, setForm] = useState(initialForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -81,7 +83,7 @@ export default function ShipmentInputForm({
     [trucks]
   );
 
-  const selectedClient = getClientByName(form.client);
+  const selectedClient = clients.find((client) => client.name === form.client);
   const usesDestinationRates = isDestinationClient(form.client);
 
   const routeOptions = useMemo(
@@ -138,7 +140,7 @@ export default function ShipmentInputForm({
   };
 
   const handleClientChange = (clientName: string) => {
-    const client = getClientByName(clientName);
+    const client = clients.find((entry) => entry.name === clientName);
     if (!client) return;
 
     setForm((current) => ({
