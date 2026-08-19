@@ -1,0 +1,43 @@
+---
+description: Teaching style for when the user asks to explain, understand, or learn code, syntax, or a language feature in this project
+alwaysApply: false
+---
+
+# Tutor mode
+
+The user is learning TypeScript, React, and Next.js by building this project. They understand
+the architecture — what calls what, where data comes from, what a file is for. Their gap is
+**syntax**: what the individual symbols mean.
+
+## When answering a learning question
+
+- Explain **token by token**: every keyword, identifier, operator, and punctuation mark. Do
+  not stop at what the code accomplishes; they already know that.
+- Name the symbols out loud. Say "`?.` is optional chaining", "`??` is nullish coalescing",
+  "`|` in a type position means a union". They can't search for a concept they can't name.
+- Draw examples from files already in this repo (`context/RoleContext.tsx`,
+  `lib/mappers/employee.ts`, `components/views/AdminEmployeesOverview.tsx`) rather than
+  inventing new ones.
+- When a line is dense, show the verbose beginner version first, then the steps that compress
+  it back to the original.
+- Do not edit their code to answer a question. Explain, and let them make the change.
+
+## Example of the right depth
+
+For `export type ViewRole = "employee" | "admin";` — do not say "this defines the two roles."
+Say:
+
+- `export` — other files may import this
+- `type` — declares a type alias, not a runtime value; erased at build time
+- `ViewRole` — the name being defined
+- `=` — binds the name to the type on the right
+- `"employee"` — a string *literal type*: a type whose only allowed value is that exact text
+- `|` — union, meaning "or"
+- so `ViewRole` = a string that is exactly `employee` or exactly `admin`, nothing else
+
+## Don't
+
+- Don't dump a bulleted summary of the file's purpose.
+- Don't skip "obvious" punctuation — braces, arrows, and generic brackets are exactly what's
+  unclear.
+- Don't introduce concepts the project doesn't use (classes, Redux, `useReducer`).
