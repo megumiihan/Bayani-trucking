@@ -1,18 +1,19 @@
 # Bayani Trucking — Handoff
 
-Last updated: 2026-08-19
+Last updated: 2026-08-29
 
 ## Quick start
 
 ```bash
 npm install
-cp .env.example .env   # if needed; set DATABASE_URL to Supabase Postgres
+cp .env.example .env   # fill in from the Supabase dashboard
 npm run db:push
-npm run db:seed        # loads mock employees, trucks, clients, routes, shipments
+npm run db:seed        # employees, trucks, clients, routes — no shipments
 npm run dev
 ```
 
-Open http://localhost:3000. Use the **Employee / Admin** toggle in the navbar (prototype auth, not real login).
+Open http://localhost:3000. You will be redirected to `/login`; sign in with a
+provisioned account (see Accounts below). There is no signup page by design.
 
 **Verify build:** `npx tsc --noEmit`, `npm run lint`, `npm run build` — all pass as of last check.
 
@@ -32,15 +33,32 @@ The previous project's credentials stopped authenticating. A new Supabase projec
 created, `DATABASE_URL` in `.env` was repointed at it, and the schema was pushed and
 seeded from scratch. `.env` is gitignored, so a new environment needs its own copy.
 
-Verified after the switch: `npm run db:seed` reports 6 clients, 15 employees, 11 trucks,
-**75 routes**, 7 shipments. If the route count comes back as 63, the widened
-`DestinationRoute` unique constraint did not apply — see Schema notes.
+Current contents as of 2026-08-29: 15 employees, 6 clients, 75 routes, 16 profiles,
+**0 shipments**. If the route count comes back as 63, the widened `DestinationRoute`
+unique constraint did not apply — see Schema notes.
 
 ### Cleanup (not urgent)
 
 - Delete nested repo: `Bayani-trucking/.git` (empty nested git dir; breaks `git add .` if hit)
-- `prisma/schema.prisma` has a commented-out `directUrl` line left from the Supabase
-  reconnect; delete it if it isn't needed.
+
+---
+
+## Accounts
+
+Logins are created by script, never by signup, because each auth user also needs a
+`Profile` row to carry its role. Creating one without the other produces a user who can
+sign in but has no permissions.
+
+```bash
+npx tsx scripts/provision-user.ts admin@example.com 'password' admin
+npx tsx scripts/provision-employees.ts            # dry run, prints the table
+npx tsx scripts/provision-employees.ts --commit   # actually creates them
+```
+
+Both scripts skip accounts that already exist, so rerunning after a new hire only creates
+the missing ones. Driver emails use the `@bayanitrucking.local` domain, which is not a
+real domain — password resets by email will not work, and the office resets passwords
+from the Supabase dashboard instead. Move to a domain you own if that becomes a problem.
 
 ---
 
@@ -50,7 +68,10 @@ Verified after the switch: `npm run db:seed` reports 6 clients, 15 employees, 11
 
 **Database:** Supabase PostgreSQL via Prisma (`prisma/schema.prisma`).
 
-**Auth:** Prototype only — `context/RoleContext.tsx` role toggle. No Supabase Auth yet.
+**Auth:** Supabase Auth. `middleware.ts` refreshes the session and redirects signed-out
+visitors to `/login`. `lib/auth.ts` exposes `getSessionUser` / `requireUser` /
+`requireAdmin`, and every server action calls one of the last two. `context/RoleContext.tsx`
+survives only as the admin's view-as-employee preview toggle; it no longer grants anything.
 
 ---
 
@@ -64,7 +85,7 @@ Verified after the switch: `npm run db:seed` reports 6 clients, 15 employees, 11
 | New shipment form | ✅ employees + trucks + clients dropdowns | ✅ `saveShipment` |
 | Routes & rates page (`/admin/routes`) | ✅ `getDestinationRoutes()` | — |
 | Payout rate lookups (save + earnings) | ❌ `lib/rates.ts` (static/generated) | — |
-| Login | ❌ prototype toggle only | — |
+| Login | ✅ Supabase Auth + `Profile` | ✅ via provisioning scripts |
 
 ### Server actions
 
@@ -103,9 +124,32 @@ step, and deserves tests on `lib/calculations.ts` first.
 - **`lib/rates.ts` + `lib/destinationRates.generated.ts`** — Route pricing. Still the source
   for all payout math (see "Two sources of truth" above); `/admin/routes` reads the DB.
 - **`lib/trucks.ts`** — Truck type + `formatTruckLabel()` + seed array. Runtime truck list from `getTrucks()`.
-- **`lib/mockUsers.ts`** — Display names for `uploadedByUserId`; no users table.
+- **`lib/mockUsers.ts`** — Only a fallback now. Uploader names resolve through the
+  `Profile` relation; this is consulted when a legacy row has no matching profile.
 - **`payoutStatus`** — Not in schema. Mapper hardcodes `"Pending"` in `lib/mappers/shipmentLog.ts`.
 - **Employee profile fields** — `employeeNo`, address, emergency contact, etc. are empty strings in `mapEmployeeToUi`; only `fullName`, `role`, `isActive`, `remarks` come from DB.
+
+---
+
+## Row level security
+
+Tables created by Prisma do not get the row level security that Supabase applies to
+tables made through its dashboard. On 2026-08-29 all six tables were confirmed readable
+over the public REST API using the anon key — the key that ships to every browser — and
+RLS was enabled on all of them (`prisma/rls.sql`).
+
+There are deliberately **no policies**, which denies anon and authenticated outright.
+Prisma is unaffected because it connects as the table owner and owners bypass RLS. All
+access therefore goes through the app, where `lib/auth.ts` checks the session.
+
+`prisma db push` does not manage RLS, so **rerun `prisma/rls.sql` after any push that
+recreates a table**, and add the statement there when adding a model. To re-verify:
+
+```bash
+curl -s "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/Employee?select=id&limit=1" \
+  -H "apikey: $NEXT_PUBLIC_SUPABASE_ANON_KEY"
+# expect []  — anything else means the table is exposed
+```
 
 ---
 
@@ -134,18 +178,39 @@ unique constraint, which would let duplicate area-priced routes through.
 
 ---
 
+## Deployment
+
+Target is Vercel, which builds from `origin/main`. Two settings matter and both are
+already committed:
+
+- `npm run build` runs `prisma generate` first. Vercel restores a cached `node_modules`,
+  so install alone will not regenerate the client and the build would ship a stale one.
+- `DATABASE_URL` points at the **transaction pooler** (port 6543, `?pgbouncer=true`).
+  Serverless functions each open their own connections and would exhaust a direct
+  connection. `DIRECT_URL` (port 5432) exists for `db:push`, which cannot run through
+  pgbouncer.
+
+Set all five variables from `.env.example` in the Vercel project — Production and Preview.
+`SUPABASE_SERVICE_ROLE_KEY` is only read by the provisioning scripts, which run from a
+laptop, so the deployment does not strictly need it; leave it out of Vercel unless
+something server-side starts using it.
+
+After the first deploy, add the Vercel URL to Supabase under Authentication → URL
+Configuration → Redirect URLs, or auth redirects will bounce to localhost.
+
+---
+
 ## Next steps (priority order)
 
 1. **Push `main` to origin** — local is several commits ahead.
-2. **Add tests for `lib/calculations.ts`** — pure input/output payout math, no DB needed.
+2. **Deploy to Vercel** — see above.
+3. **Add tests for `lib/calculations.ts`** — pure input/output payout math, no DB needed.
    Nothing currently checks the money except manual review.
-3. **Move payout rate lookups to the DB** — removes the two-sources-of-truth risk above.
-   Do this after step 2.
-4. **`isDestinationClient()` from the DB** — currently blocks saving any client that exists
+4. **Move payout rate lookups to the DB** — removes the two-sources-of-truth risk above.
+   Do this after tests.
+5. **`isDestinationClient()` from the DB** — currently blocks saving any client that exists
    only in Supabase.
-5. **Update `README.md`** — still says all data lives in `mockData.ts`.
-6. **Real auth** — Supabase Auth before any production deployment. `ShipmentLog.createdById`
-   currently stores a `lib/mockUsers.ts` id that points at no table.
+6. **Update `README.md`** — still says all data lives in `mockData.ts`.
 7. **`payoutStatus`** — add DB column or remove from UI/export if not needed.
 8. **Employee profile fields** — schema has no `employeeNo`, address, or emergency contact
    columns, and `tenureStatus` is derived from `isActive` alone, so every active employee
@@ -156,6 +221,8 @@ unique constraint, which would let duplicate area-priced routes through.
 ## Risks
 
 - **Rate drift:** `/admin/routes` and payout math read different sources — see above.
+- **RLS resets on schema recreation** — `prisma db push` can drop and recreate a table
+  without its RLS setting. Rerun `prisma/rls.sql` after any push.
 - **No automated tests** — `package.json` has no test script.
 - **README outdated** — onboarding will assume mock-only architecture.
 - **Nested `.git`** — can confuse git operations.
