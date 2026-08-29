@@ -7,10 +7,20 @@
  * Passwords are shown once, here, and are not recoverable afterwards — print the
  * table or copy it before closing the terminal. Re-running is safe: employees who
  * already have a profile are skipped.
+ *
+ * When rebuilding against a fresh Supabase project, pass a file of already-issued
+ * credentials so drivers keep the passwords they were given:
+ *
+ *   npx tsx scripts/provision-employees.ts --commit --passwords creds.local.json
+ *
+ * The file maps login to password, { "juan@example.com": "Tamaraw-1234" }. Emails
+ * are derived from names and so come out the same on a new project; anyone missing
+ * from the file just gets a fresh password.
  */
 import { createClient } from "@supabase/supabase-js";
 import { PrismaClient } from "@prisma/client";
 import { randomInt } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 const prisma = new PrismaClient();
 
@@ -50,8 +60,35 @@ function makeEmail(fullName: string, taken: Set<string>) {
   throw new Error(`Could not generate a unique email for ${fullName}`);
 }
 
+function loadKnownPasswords(): Map<string, string> {
+  const flag = process.argv.indexOf("--passwords");
+  if (flag === -1) return new Map();
+
+  const file = process.argv[flag + 1];
+  if (!file) throw new Error("--passwords needs a file path");
+
+  const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`${file} must contain a JSON object of login → password`);
+  }
+
+  return new Map(
+    Object.entries(parsed as Record<string, unknown>).map(([email, password]) => {
+      if (typeof password !== "string") {
+        throw new Error(`Password for ${email} is not a string`);
+      }
+      return [email.toLowerCase(), password];
+    })
+  );
+}
+
 async function main() {
   const commit = process.argv.includes("--commit");
+  const knownPasswords = loadKnownPasswords();
+
+  if (knownPasswords.size > 0) {
+    console.log(`Reusing ${knownPasswords.size} existing password(s) where the login matches.\n`);
+  }
 
   const employees = await prisma.employee.findMany({
     where: { isActive: true, profile: null },
@@ -67,11 +104,16 @@ async function main() {
   const existing = await prisma.profile.findMany({ select: { email: true } });
   const taken = new Set(existing.map((profile) => profile.email));
 
-  const planned = employees.map((employee) => ({
-    ...employee,
-    email: makeEmail(employee.fullName, taken),
-    password: makePassword(),
-  }));
+  const planned = employees.map((employee) => {
+    const email = makeEmail(employee.fullName, taken);
+    const known = knownPasswords.get(email.toLowerCase());
+    return {
+      ...employee,
+      email,
+      password: known ?? makePassword(),
+      reused: known !== undefined,
+    };
+  });
 
   if (!commit) {
     console.log(
@@ -121,15 +163,17 @@ async function main() {
       Role: person.role,
       Login: person.email,
       Password: person.password,
+      Source: person.reused ? "existing" : "new",
     });
   }
 
   console.table(rows);
 
   if (commit) {
+    const fresh = rows.filter((row) => row.Source === "new").length;
     console.log(
-      `\nCreated ${rows.length} account(s). Passwords are not stored anywhere — ` +
-        "copy this table now."
+      `\nCreated ${rows.length} account(s), ${fresh} with a new password. ` +
+        "Passwords are not stored anywhere — copy this table now."
     );
   }
 }

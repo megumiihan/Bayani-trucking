@@ -32,6 +32,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# local credential sheets used to recreate accounts — never commit
+*.local.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
