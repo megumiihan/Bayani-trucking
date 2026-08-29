@@ -13,6 +13,14 @@ function toPrismaEmployeeRole(role: "Driver" | "Helper"): EmployeeRole {
 }
 
 async function main() {
+  const existingShipments = await prisma.shipmentLog.count();
+  if (existingShipments > 0 && process.env.ALLOW_DESTRUCTIVE_SEED !== "true") {
+    throw new Error(
+      `Refusing to seed: ${existingShipments} shipment log(s) already exist and seeding deletes them.\n` +
+        "These may be real trips. Re-run with ALLOW_DESTRUCTIVE_SEED=true only if you are certain."
+    );
+  }
+
   console.log("Clearing existing data…");
   await prisma.shipmentLog.deleteMany();
   await prisma.destinationRoute.deleteMany();
@@ -86,7 +94,14 @@ async function main() {
   }
   console.log(`  ${seededRoutes} routes`);
 
-  console.log("Seeding mock shipments…");
+  // Demo shipments are opt-in: real trip logs are entered through the app, and a
+  // reseed must never resurrect fake trips in a live database.
+  if (process.env.SEED_DEMO_SHIPMENTS !== "true") {
+    await summarise();
+    return;
+  }
+
+  console.log("Seeding demo shipments…");
   const [dbEmployees, dbTrucks] = await Promise.all([
     prisma.employee.findMany({ select: { id: true, fullName: true } }),
     prisma.truck.findMany({ select: { id: true, plateNumber: true } }),
@@ -166,6 +181,10 @@ async function main() {
   }
   console.log(`  ${seededShipments} shipments`);
 
+  await summarise();
+}
+
+async function summarise() {
   const [clientCount, employeeCount, truckCount, routeCount, shipmentCount] =
     await Promise.all([
       prisma.client.count(),
