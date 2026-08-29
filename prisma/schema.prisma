@@ -7,8 +7,11 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
-  //directUrl = env("DIRECT_URL")
+  // Pooled connection, used at runtime by the app.
+  url       = env("DATABASE_URL")
+  // Unpooled connection, used by `prisma db push` and `migrate`, which
+  // cannot run through pgbouncer.
+  directUrl = env("DIRECT_URL")
 }
 
 // 1. EMPLOYEES TABLE (Master list of drivers & helpers)
