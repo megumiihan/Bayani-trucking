@@ -7,7 +7,8 @@ type ShipmentLogWithClient = ShipmentLog & {
 };
 
 export function mapShipmentLogToShipment(
-  record: ShipmentLogWithClient
+  record: ShipmentLogWithClient,
+  uploadedByName?: string
 ): Shipment {
   const { remarks, extraHelperNote } = resolveShipmentRemarkFields(record);
 
@@ -31,6 +32,7 @@ export function mapShipmentLogToShipment(
     flagged: record.isFlagged,
     approved: record.isApproved,
     uploadedByUserId: record.createdById,
+    uploadedByName,
     driverPayout: record.driverPayout,
     helperPayout: record.helperPayout,
     extraHelperPayout: record.extraHelperPayout,

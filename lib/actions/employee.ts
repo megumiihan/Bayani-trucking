@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireAdmin } from "@/lib/auth";
 import { mapEmployeeToUi } from "@/lib/mappers/employee";
 import { trimOrNull } from "@/lib/mappers/shipmentRemarks";
 import { prisma } from "@/lib/prisma";
@@ -15,6 +16,8 @@ export async function updateEmployeeRemarks(
   remarks: string
 ): Promise<UpdateEmployeeRemarksResult> {
   try {
+    await requireAdmin();
+
     const existing = await prisma.employee.findUnique({
       where: { id },
       select: { id: true },

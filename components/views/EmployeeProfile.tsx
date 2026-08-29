@@ -52,7 +52,7 @@ export default function EmployeeProfile({
 }: EmployeeProfileProps) {
   const [shipments] = useState(initialShipments);
   const [employees] = useState(initialEmployees);
-  const { currentEmployee, setCurrentEmployee } = useRole();
+  const { currentEmployee, setCurrentEmployee, isAdmin } = useRole();
   const [monthFilter, setMonthFilter] = useState(ALL_MONTHS);
   const [clientFilter, setClientFilter] = useState(ALL_CLIENTS);
 
@@ -106,7 +106,7 @@ export default function EmployeeProfile({
           description="Track your monthly salary, shipment history, and role-based payouts."
         />
 
-        <label className="shrink-0">
+        <label className={`shrink-0 ${isAdmin ? "" : "hidden"}`}>
           <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-gray-500">
             Viewing as
           </span>

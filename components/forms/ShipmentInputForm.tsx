@@ -16,7 +16,6 @@ import {
 } from "@/lib/rates";
 import { calculateDestinationPayout } from "@/lib/calculations";
 import { saveShipment } from "@/lib/actions/shipment";
-import { useRole } from "@/context/RoleContext";
 import PageHeader from "@/components/ui/PageHeader";
 import SearchableSelect from "@/components/ui/SearchableSelect";
 
@@ -36,7 +35,6 @@ export default function ShipmentInputForm({
   clients,
 }: ShipmentInputFormProps) {
   const router = useRouter();
-  const { currentUserId } = useRole();
 
   const defaultClient = clients[0];
 
@@ -174,7 +172,6 @@ export default function ShipmentInputForm({
       extraHelper: form.extraHelper,
       extraHelperNote: form.extraHelperNote,
       remarks: form.remarks,
-      createdByUserId: currentUserId,
     });
 
     setIsSubmitting(false);

@@ -338,7 +338,7 @@ function MasterTableRow({
       </td>
       <td className="whitespace-nowrap border-r border-gray-100 px-3 py-3 text-gray-700">
         <p className="font-medium text-gray-900">
-          {getUserDisplayName(shipment.uploadedByUserId)}
+          {shipment.uploadedByName ?? getUserDisplayName(shipment.uploadedByUserId)}
         </p>
       </td>
       <td className="max-w-xs truncate border-r border-gray-100 px-3 py-3 text-gray-500">

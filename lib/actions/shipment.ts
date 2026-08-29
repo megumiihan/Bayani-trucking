@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { ShipmentLog } from "@prisma/client";
+import { requireAdmin, requireUser } from "@/lib/auth";
 import { calculateDestinationPayout } from "@/lib/calculations";
 import { isDestinationClient } from "@/lib/clients";
 import { mapShipmentLogToShipment } from "@/lib/mappers/shipmentLog";
@@ -29,7 +30,6 @@ export interface ShipmentFormInput {
   extraHelper?: string;
   extraHelperNote?: string;
   remarks?: string;
-  createdByUserId: string;
   weightKg?: number | null;
   headCount?: number | null;
 }
@@ -81,6 +81,8 @@ export async function saveShipment(
   input: ShipmentFormInput
 ): Promise<SaveShipmentResult> {
   try {
+    const user = await requireUser();
+
     if (!input.plateNumber?.trim()) {
       return { success: false, error: "Plate number is required." };
     }
@@ -92,9 +94,6 @@ export async function saveShipment(
     }
     if (!input.farthestRoute?.trim()) {
       return { success: false, error: "Farthest route is required." };
-    }
-    if (!input.createdByUserId?.trim()) {
-      return { success: false, error: "Created-by user is required." };
     }
 
     const clientId = await resolveClientId(input.client);
@@ -165,12 +164,13 @@ export async function saveShipment(
         remarks: buildRemarks(input),
         isFlagged: false,
         clientId,
-        createdById: input.createdByUserId,
+        createdById: user.id,
       },
     });
 
     revalidatePath("/");
     revalidatePath("/employee/profile");
+    revalidatePath("/admin/employees");
 
     return { success: true, record };
   } catch (error) {
@@ -193,6 +193,8 @@ export async function toggleShipmentFlag(
   id: string
 ): Promise<ToggleShipmentFlagResult> {
   try {
+    await requireAdmin();
+
     const current = await prisma.shipmentLog.findUnique({
       where: { id },
       select: { isFlagged: true },
@@ -210,6 +212,7 @@ export async function toggleShipmentFlag(
 
     revalidatePath("/");
     revalidatePath("/employee/profile");
+    revalidatePath("/admin/employees");
 
     return {
       success: true,
@@ -251,6 +254,8 @@ export async function updateShipment(
   input: UpdateShipmentInput
 ): Promise<UpdateShipmentResult> {
   try {
+    await requireAdmin();
+
     const existing = await prisma.shipmentLog.findUnique({
       where: { id },
       select: { id: true },
@@ -286,6 +291,7 @@ export async function updateShipment(
 
     revalidatePath("/");
     revalidatePath("/employee/profile");
+    revalidatePath("/admin/employees");
 
     return {
       success: true,

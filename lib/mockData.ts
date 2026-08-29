@@ -42,6 +42,8 @@ export interface Shipment {
   flagged: boolean;
   approved: boolean;
   uploadedByUserId: string;
+  /** Resolved from the Profile table at query time; absent for legacy seeded rows. */
+  uploadedByName?: string;
   /** Stored payout snapshots from the database (when loaded from ShipmentLog). */
   driverPayout?: number;
   helperPayout?: number;

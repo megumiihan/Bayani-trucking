@@ -9,5 +9,19 @@ export async function getShipments() {
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
   });
 
-  return records.map(mapShipmentLogToShipment);
+  const profiles = await prisma.profile.findMany({
+    where: { id: { in: [...new Set(records.map((r) => r.createdById))] } },
+    select: { id: true, email: true, employee: { select: { fullName: true } } },
+  });
+
+  const nameById = new Map(
+    profiles.map((profile) => [
+      profile.id,
+      profile.employee?.fullName ?? profile.email,
+    ])
+  );
+
+  return records.map((record) =>
+    mapShipmentLogToShipment(record, nameById.get(record.createdById))
+  );
 }
