@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import AppShell from "@/components/AppShell";
 import { RoleProvider } from "@/context/RoleContext";
+import { getSessionUser } from "@/lib/auth";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -19,19 +20,32 @@ export const metadata: Metadata = {
   description: "Delivery management system for Bayani Trucking",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const user = await getSessionUser();
+
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-gray-50 antialiased`}
       >
-        <RoleProvider>
-          <AppShell>{children}</AppShell>
-        </RoleProvider>
+        {user ? (
+          <RoleProvider
+            user={{
+              id: user.id,
+              email: user.email,
+              role: user.role,
+              employeeName: user.employeeName,
+            }}
+          >
+            <AppShell>{children}</AppShell>
+          </RoleProvider>
+        ) : (
+          children
+        )}
       </body>
     </html>
   );

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useRole, type ViewRole } from "@/context/RoleContext";
+import { signOut } from "@/lib/actions/auth";
 
 const navLinks = {
   employee: [
@@ -17,7 +18,7 @@ const navLinks = {
 };
 
 export default function Navbar() {
-  const { role, setRole, logout } = useRole();
+  const { role, setRole, isAdmin, email } = useRole();
   const pathname = usePathname();
   const router = useRouter();
   const links = navLinks[role];
@@ -68,17 +69,18 @@ export default function Navbar() {
 
         {/* Role switcher + logout */}
         <div className="flex items-center gap-3">
-          <RoleSwitcher role={role} onChange={handleRoleChange} />
-          <button
-            type="button"
-            onClick={() => {
-              logout();
-              router.push("/");
-            }}
-            className="hidden rounded-md px-2 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 sm:block"
-          >
-            Log out
-          </button>
+          {isAdmin && <RoleSwitcher role={role} onChange={handleRoleChange} />}
+          <span className="hidden max-w-[12rem] truncate text-xs text-gray-500 lg:block">
+            {email}
+          </span>
+          <form action={signOut}>
+            <button
+              type="submit"
+              className="hidden rounded-md px-2 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 sm:block"
+            >
+              Log out
+            </button>
+          </form>
         </div>
       </div>
 

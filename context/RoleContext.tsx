@@ -1,66 +1,60 @@
 "use client";
 
 import { createContext, useContext, useState, type ReactNode } from "react";
-import {
-  DEFAULT_ADMIN_USER_ID,
-  DEFAULT_EMPLOYEE_USER_ID,
-  getUserByEmployeeName,
-} from "@/lib/mockUsers";
 
 export type ViewRole = "employee" | "admin";
 
-export const DEFAULT_EMPLOYEE = "Arsenio Tumanan";
+export interface SessionUserView {
+  id: string;
+  email: string;
+  role: ViewRole;
+  employeeName: string | null;
+}
 
 interface RoleContextValue {
+  /** The view currently being shown. Admins may switch; employees may not. */
   role: ViewRole;
-  isAuthenticated: boolean;
+  isAdmin: boolean;
+  email: string;
   currentUserId: string;
   currentEmployee: string;
-  login: (role: ViewRole) => void;
-  logout: () => void;
   setRole: (role: ViewRole) => void;
   setCurrentEmployee: (name: string) => void;
 }
 
 const RoleContext = createContext<RoleContextValue | null>(null);
 
-export function RoleProvider({ children }: { children: ReactNode }) {
-  const [role, setRole] = useState<ViewRole>("employee");
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState(DEFAULT_EMPLOYEE_USER_ID);
-  const [currentEmployee, setCurrentEmployeeState] = useState(DEFAULT_EMPLOYEE);
+export function RoleProvider({
+  user,
+  children,
+}: {
+  user: SessionUserView;
+  children: ReactNode;
+}) {
+  const isAdmin = user.role === "admin";
+  const [role, setRoleState] = useState<ViewRole>(user.role);
+  const [currentEmployee, setCurrentEmployeeState] = useState(
+    user.employeeName ?? ""
+  );
+
+  const setRole = (nextRole: ViewRole) => {
+    if (nextRole === "admin" && !isAdmin) return;
+    setRoleState(nextRole);
+  };
 
   const setCurrentEmployee = (name: string) => {
+    if (!isAdmin && name !== user.employeeName) return;
     setCurrentEmployeeState(name);
-    const user = getUserByEmployeeName(name);
-    if (user) {
-      setCurrentUserId(user.id);
-    }
-  };
-
-  const login = (nextRole: ViewRole) => {
-    setRole(nextRole);
-    setIsAuthenticated(true);
-    if (nextRole === "employee") {
-      setCurrentEmployee(DEFAULT_EMPLOYEE);
-    } else {
-      setCurrentUserId(DEFAULT_ADMIN_USER_ID);
-    }
-  };
-
-  const logout = () => {
-    setIsAuthenticated(false);
   };
 
   return (
     <RoleContext.Provider
       value={{
         role,
-        isAuthenticated,
-        currentUserId,
+        isAdmin,
+        email: user.email,
+        currentUserId: user.id,
         currentEmployee,
-        login,
-        logout,
         setRole,
         setCurrentEmployee,
       }}

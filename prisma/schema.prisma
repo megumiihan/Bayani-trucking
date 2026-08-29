@@ -23,12 +23,32 @@ model Employee {
   // Optional: Allows querying all shipments completed by this employee
   driverShipments ShipmentLog[] @relation("DriverRelation")
   helperShipments ShipmentLog[] @relation("HelperRelation")
+  profile         Profile?
 }
 
 enum EmployeeRole {
   DRIVER
   HELPER
   BOTH
+}
+
+// 1b. PROFILES (one row per Supabase Auth user)
+model Profile {
+  /// Matches the Supabase `auth.users.id` for this person.
+  id         String    @id
+  email      String    @unique
+  role       AppRole   @default(EMPLOYEE)
+  /// Null for office staff who are not drivers or helpers.
+  employeeId String?   @unique
+  employee   Employee? @relation(fields: [employeeId], references: [id])
+  createdAt  DateTime  @default(now())
+
+  createdShipments ShipmentLog[]
+}
+
+enum AppRole {
+  ADMIN
+  EMPLOYEE
 }
 
 // 2. TRUCKS TABLE (Master fleet list)
@@ -130,5 +150,6 @@ model ShipmentLog {
   clientId    String
   client      Client   @relation(fields: [clientId], references: [id])
   createdById String
+  createdBy   Profile  @relation(fields: [createdById], references: [id])
   createdAt   DateTime @default(now())
 }

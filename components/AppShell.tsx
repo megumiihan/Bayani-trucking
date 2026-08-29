@@ -1,16 +1,6 @@
-"use client";
-
-import { useRole } from "@/context/RoleContext";
 import Navbar from "@/components/Navbar";
-import LoginScreen from "@/components/LoginScreen";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useRole();
-
-  if (!isAuthenticated) {
-    return <LoginScreen />;
-  }
-
   return (
     <>
       <Navbar />
