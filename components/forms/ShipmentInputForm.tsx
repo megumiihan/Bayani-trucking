@@ -16,6 +16,7 @@ import {
 } from "@/lib/rates";
 import { calculateDestinationPayout } from "@/lib/calculations";
 import { saveShipment } from "@/lib/actions/shipment";
+import { useRole } from "@/context/RoleContext";
 import PageHeader from "@/components/ui/PageHeader";
 import SearchableSelect from "@/components/ui/SearchableSelect";
 
@@ -35,6 +36,7 @@ export default function ShipmentInputForm({
   clients,
 }: ShipmentInputFormProps) {
   const router = useRouter();
+  const { isAdmin } = useRole();
 
   const defaultClient = clients[0];
 
@@ -194,7 +196,11 @@ export default function ShipmentInputForm({
     <div>
       <PageHeader
         title="New Shipment"
-        description="Record a delivery and preview estimated driver and helper payouts."
+        description={
+          isAdmin
+            ? "Record a delivery and preview estimated driver and helper payouts."
+            : "Record a delivery."
+        }
       />
 
       {errorMessage && (
@@ -248,7 +254,7 @@ export default function ShipmentInputForm({
 
       <form
         onSubmit={handleSubmit}
-        className="grid grid-cols-1 gap-6 lg:grid-cols-3"
+        className={`grid grid-cols-1 gap-6 ${isAdmin ? "lg:grid-cols-3" : ""}`}
       >
         <div className="space-y-5 lg:col-span-2">
           <FormSection title="Delivery Details">
@@ -469,6 +475,7 @@ export default function ShipmentInputForm({
           </button>
         </div>
 
+        {isAdmin && (
         <aside className="lg:col-span-1">
           <div className="sticky top-24 rounded-xl border border-blue-100 bg-blue-50 p-5 shadow-sm">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-blue-800">
@@ -538,6 +545,7 @@ export default function ShipmentInputForm({
             )}
           </div>
         </aside>
+        )}
       </form>
     </div>
   );
