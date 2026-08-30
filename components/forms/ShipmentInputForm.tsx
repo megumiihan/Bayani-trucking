@@ -294,15 +294,6 @@ export default function ShipmentInputForm({
                 </select>
               </Field>
 
-              <Field label="Client ID">
-                <input
-                  type="text"
-                  readOnly
-                  value={form.clientNumber}
-                  className={`${inputClass} bg-gray-50 text-gray-600`}
-                />
-              </Field>
-
               <Field label="Shipment Number" required>
                 <input
                   type="text"
