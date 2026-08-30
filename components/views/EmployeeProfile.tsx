@@ -131,13 +131,17 @@ export default function EmployeeProfile({
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-lg font-bold text-blue-700">
             {currentEmployee
-              .split(" ")
-              .map((part) => part[0])
-              .slice(0, 2)
-              .join("")}
+              ? currentEmployee
+                  .split(" ")
+                  .map((part) => part[0])
+                  .slice(0, 2)
+                  .join("")
+              : "?"}
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">{currentEmployee}</h2>
+            <h2 className="text-lg font-semibold text-gray-900">
+              {currentEmployee || "Account not linked to a crew member"}
+            </h2>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               {employeeRecord && (
                 <>
@@ -149,6 +153,13 @@ export default function EmployeeProfile({
                 </>
               )}
             </div>
+            {!currentEmployee && !isAdmin && (
+              <p className="mt-2 text-sm text-gray-500">
+                This login is not connected to an employee record, so earnings
+                and shipment history cannot be shown. Ask an admin to link the
+                account.
+              </p>
+            )}
             {employeeRecord?.remarks && (
               <p className="mt-2 text-sm text-gray-500">{employeeRecord.remarks}</p>
             )}

@@ -224,9 +224,10 @@ Configuration → Redirect URLs, or auth redirects will bounce to localhost.
 
 ## Regions and page latency
 
-Users are in Manila. The database is in Frankfurt (`eu-central-1`), because that was the
-Supabase default when the project was created. Functions were running in Washington
-(`iad1`, Vercel's default), so every request crossed the Atlantic.
+Users are in Manila. Production should use the Supabase project in Singapore
+(`ap-southeast-1`) and Vercel functions in `sin1`. That pairing is what `vercel.json`
+pins. Local `.env` already points at Singapore; Vercel has its **own** copy of the
+same variable names, and those were still the Frankfurt project until the cutover.
 
 The browser makes **one** round trip to the function, but the function makes **four
 sequential** round trips to the database — middleware `getUser()`, the layout's second
@@ -234,20 +235,17 @@ sequential** round trips to the database — middleware `getUser()`, the layout'
 distance therefore dominates, and colocating the function with the database beats
 colocating it with the user:
 
-| Function region | Manila → function | Function → DB (×4) | Total |
+| Function region + database | Manila → function | Function → DB (×4) | Total |
 |---|---|---|---|
-| `iad1` Washington | ~200ms | ~360ms | ~560ms |
-| `sin1` Singapore | ~35ms | ~640ms | ~675ms |
-| `fra1` Frankfurt (current, `vercel.json`) | ~195ms | ~4ms | ~200ms |
-| `sin1` + database in Singapore | ~35ms | ~4ms | **~40ms** |
+| `iad1` Washington + Frankfurt (Vercel default, old) | ~200ms | ~360ms | ~560ms |
+| `sin1` Singapore + Frankfurt (worst pairing) | ~35ms | ~640ms | ~675ms |
+| `fra1` Frankfurt + Frankfurt | ~195ms | ~4ms | ~200ms |
+| `sin1` + Singapore (current target) | ~35ms | ~4ms | **~40ms** |
 
-**The last row is the real fix**, and it is cheap only while `ShipmentLog` is empty.
-Supabase cannot move a project between regions, so it means creating a new project in
-Southeast Asia and re-pointing at it. Everything currently in the database is
-reproducible: `db:push`, `db:seed`, `prisma/rls.sql`, then the provisioning scripts.
-The only real cost is that drivers get new passwords, since Supabase Auth users must be
-recreated. Once real trips are logged this becomes a genuine data migration — do it
-before the drivers start, or accept Frankfurt.
+The Singapore project already exists and is seeded. Auth users cannot be copied
+between Supabase projects; they were recreated there with the same emails and
+passwords. Do not point functions at Singapore while `DATABASE_URL` still says
+Frankfurt — that is the slow pairing above.
 
 Page load is *not* limited by data volume: the routes page fetches 75 rows and the
 employees page 15. Pagination would add complexity and save nothing, because the round
@@ -257,8 +255,10 @@ trips are the cost, not the rows.
 
 ## Next steps (priority order)
 
-1. **Push `main` to origin** — local is several commits ahead.
-2. **Deploy to Vercel** — see above.
+1. **Finish the Singapore cutover** — Vercel env vars must match local `.env`
+   (Singapore). Then push so `vercel.json` moves functions to `sin1`.
+2. **Delete the Frankfurt Supabase project** once live login and a test shipment
+   succeed against Singapore.
 3. **Add tests for `lib/calculations.ts`** — pure input/output payout math, no DB needed.
    Nothing currently checks the money except manual review.
 4. **Move payout rate lookups to the DB** — removes the two-sources-of-truth risk above.
