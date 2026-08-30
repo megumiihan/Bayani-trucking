@@ -52,7 +52,7 @@ function parseISODate(value: string) {
   return new Date(year, month - 1, day);
 }
 
-function isWithinDateDuration(
+export function isWithinDateDuration(
   shipmentDate: string,
   duration: DateDuration,
   customStartDate: string,

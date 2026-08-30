@@ -178,6 +178,8 @@ export function getTruckByPlateNumber(plateNumber: string): Truck | undefined {
   return trucks.find((truck) => truck.plateNumber === plateNumber);
 }
 
-export function formatTruckLabel(truck: Truck): string {
+export function formatTruckLabel(
+  truck: Pick<Truck, "plateNumber" | "make" | "yearModel" | "truckType">
+): string {
   return `${truck.plateNumber} — ${truck.make} ${truck.yearModel} (${truck.truckType})`;
 }

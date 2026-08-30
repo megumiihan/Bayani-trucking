@@ -1,7 +1,10 @@
 import { PrismaClient } from "@prisma/client";
 
+const CLIENT_REV = 3;
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
+  prismaRev?: number;
 };
 
 function createPrismaClient() {
@@ -18,12 +21,18 @@ function createPrismaClient() {
 }
 
 const cached = globalForPrisma.prisma;
-// Drop a cached client that was created before a new model was generated.
+// Drop a cached client that was created before a schema change.
 const reusable =
-  cached && "salaryPayment" in cached ? cached : undefined;
+  cached &&
+  globalForPrisma.prismaRev === CLIENT_REV &&
+  "salaryPayment" in cached &&
+  "expense" in cached
+    ? cached
+    : undefined;
 
 export const prisma = reusable ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
+  globalForPrisma.prismaRev = CLIENT_REV;
 }

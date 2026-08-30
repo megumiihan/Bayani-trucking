@@ -28,6 +28,7 @@ model Employee {
   helperShipments ShipmentLog[] @relation("HelperRelation")
   profile         Profile?
   salaryPayments  SalaryPayment[]
+  responsibleExpenses Expense[]
 }
 
 enum EmployeeRole {
@@ -49,6 +50,7 @@ model Profile {
 
   createdShipments ShipmentLog[]
   recordedPayments SalaryPayment[]
+  loggedExpenses   Expense[]
 }
 
 enum AppRole {
@@ -73,6 +75,7 @@ model Truck {
   createdAt             DateTime @default(now())
 
   shipments ShipmentLog[]
+  expenses  Expense[]
 }
 
 // 3. CLIENT MANAGEMENT
@@ -170,4 +173,33 @@ model SalaryPayment {
   createdById String
   createdBy   Profile  @relation(fields: [createdById], references: [id])
   createdAt   DateTime @default(now())
+}
+
+enum ExpenseCategory {
+  SALARY
+  GOVERNMENT_FEES
+  INSURANCE_FEES
+  MAINTENANCE_AND_REPAIRS
+  ACCIDENTS
+  LOAN_INTERESTS
+  FUEL
+  OTHERS
+}
+
+model Expense {
+  id          String          @id @default(uuid())
+  date        DateTime
+  category    ExpenseCategory
+  amount      Float
+  description String?
+  isFlagged   Boolean         @default(false)
+  isReimbursed Boolean        @default(false)
+  isCredit     Boolean        @default(false)
+  employeeId   String?
+  employee     Employee?      @relation(fields: [employeeId], references: [id])
+  truckId      String?
+  truck        Truck?         @relation(fields: [truckId], references: [id])
+  createdById String
+  createdBy   Profile         @relation(fields: [createdById], references: [id])
+  createdAt   DateTime        @default(now())
 }
