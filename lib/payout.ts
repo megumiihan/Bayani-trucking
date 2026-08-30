@@ -4,6 +4,7 @@ import {
 } from "./rates";
 import { calculateDestinationPayout } from "./calculations";
 import type { Shipment } from "./mockData";
+import type { SalaryPaymentUi } from "./mappers/salaryPayment";
 
 export type ShipmentRole = "Driver" | "Helper" | "Extra Helper";
 
@@ -115,6 +116,81 @@ export function getEmployeeStats(shipments: Shipment[], employeeName: string) {
     shipmentCount: entries.length,
     totalPayout: entries.reduce((sum, entry) => sum + entry.payout, 0),
   };
+}
+
+export type LedgerKind = "shipment" | "payment";
+
+export interface PayoutLedgerRow {
+  id: string;
+  kind: LedgerKind;
+  date: string;
+  description: string;
+  role: ShipmentRole | null;
+  shipmentNumber: string | null;
+  waybillNumber: string | null;
+  client: string | null;
+  route: string | null;
+  plateNumber: string | null;
+  note: string | null;
+  earned: number;
+  paid: number;
+  balanceAfter: number;
+}
+
+export function buildPayoutLedger(
+  shipments: Shipment[],
+  employeeName: string,
+  payments: SalaryPaymentUi[]
+): PayoutLedgerRow[] {
+  const earnedRows: Omit<PayoutLedgerRow, "balanceAfter">[] =
+    getEmployeeShipmentEntries(shipments, employeeName).map((entry) => ({
+      id: `shipment-${entry.shipment.id}-${entry.role}`,
+      kind: "shipment",
+      date: entry.shipment.date,
+      description: `${entry.shipment.client} · ${entry.shipment.farthestRoute}`,
+      role: entry.role,
+      shipmentNumber: entry.shipment.shipmentNumber,
+      waybillNumber: entry.shipment.waybillNumber,
+      client: entry.shipment.client,
+      route: entry.shipment.farthestRoute,
+      plateNumber: entry.shipment.plateNumber,
+      note: entry.shipment.remarks || null,
+      earned: entry.payout,
+      paid: 0,
+    }));
+
+  const paidRows: Omit<PayoutLedgerRow, "balanceAfter">[] = payments.map(
+    (payment) => ({
+      id: `payment-${payment.id}`,
+      kind: "payment",
+      date: payment.paidAt,
+      description: "Salary payout",
+      role: null,
+      shipmentNumber: null,
+      waybillNumber: null,
+      client: null,
+      route: null,
+      plateNumber: null,
+      note: payment.note,
+      earned: 0,
+      paid: payment.amount,
+    })
+  );
+
+  const chronological = [...earnedRows, ...paidRows].sort((a, b) => {
+    const byDate = a.date.localeCompare(b.date);
+    if (byDate !== 0) return byDate;
+    if (a.kind !== b.kind) return a.kind === "shipment" ? -1 : 1;
+    return a.id.localeCompare(b.id);
+  });
+
+  let balance = 0;
+  const withBalance = chronological.map((row) => {
+    balance += row.earned - row.paid;
+    return { ...row, balanceAfter: balance };
+  });
+
+  return withBalance.reverse();
 }
 
 export function getMonthKey(date: string): string {

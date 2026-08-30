@@ -27,6 +27,7 @@ model Employee {
   driverShipments ShipmentLog[] @relation("DriverRelation")
   helperShipments ShipmentLog[] @relation("HelperRelation")
   profile         Profile?
+  salaryPayments  SalaryPayment[]
 }
 
 enum EmployeeRole {
@@ -47,6 +48,7 @@ model Profile {
   createdAt  DateTime  @default(now())
 
   createdShipments ShipmentLog[]
+  recordedPayments SalaryPayment[]
 }
 
 enum AppRole {
@@ -152,6 +154,19 @@ model ShipmentLog {
 
   clientId    String
   client      Client   @relation(fields: [clientId], references: [id])
+  createdById String
+  createdBy   Profile  @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+// 6. SALARY PAYMENTS (cash paid to a crew member)
+model SalaryPayment {
+  id         String   @id @default(uuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  amount     Float
+  paidAt     DateTime
+  note       String?
   createdById String
   createdBy   Profile  @relation(fields: [createdById], references: [id])
   createdAt   DateTime @default(now())

@@ -17,24 +17,13 @@ function createPrismaClient() {
   });
 }
 
-function getPrismaClient() {
-  const existing = globalForPrisma.prisma;
-  if (existing) return existing;
+const cached = globalForPrisma.prisma;
+// Drop a cached client that was created before a new model was generated.
+const reusable =
+  cached && "salaryPayment" in cached ? cached : undefined;
 
-  const client = createPrismaClient();
-  // Cache in every environment so each serverless isolate reuses one client.
-  globalForPrisma.prisma = client;
-  return client;
+export const prisma = reusable ?? createPrismaClient();
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
 }
-
-/**
- * Lazy so a missing DIRECT_URL becomes a query-time error we can catch,
- * instead of crashing the module and returning Next's generic runtime page.
- */
-export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
-  get(_target, prop, _receiver) {
-    const client = getPrismaClient();
-    const value = Reflect.get(client, prop, client);
-    return typeof value === "function" ? value.bind(client) : value;
-  },
-});
