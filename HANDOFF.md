@@ -131,6 +131,28 @@ step, and deserves tests on `lib/calculations.ts` first.
 
 ---
 
+## Careful with DATABASE_URL in your shell
+
+`prisma` loads `.env` with dotenv, which **does not override variables already set in the
+environment**. So if a shell has ever run `source .env` (or `export DATABASE_URL=…`), every
+later command in that shell keeps using the old value while appearing to use `.env`.
+
+This bit us during the Singapore migration on 2026-08-30: `db:push`, `db:rls`, and
+`db:seed` all ran against the old Frankfurt project after `.env` had already been
+repointed. The seed wiped and rebuilt Frankfurt instead of Singapore. Nothing
+unrecoverable was lost — that database held only seeded rows and zero shipments — but
+`Profile.employeeId` is an optional relation, so deleting employees set all 15 driver
+links to `NULL` rather than erroring.
+
+`prisma/seed.ts` now prints its target host before clearing anything. Read that line.
+To check a shell before running anything destructive:
+
+```bash
+env | grep -E '^(DATABASE_URL|DIRECT_URL)='   # expect no output
+```
+
+---
+
 ## Row level security
 
 Tables created by Prisma do not get the row level security that Supabase applies to

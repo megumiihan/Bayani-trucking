@@ -12,7 +12,21 @@ function toPrismaEmployeeRole(role: "Driver" | "Helper"): EmployeeRole {
   return role === "Driver" ? "DRIVER" : "HELPER";
 }
 
+/**
+ * The host this run will write to. Printed before anything destructive because an
+ * exported DATABASE_URL silently wins over the one in .env, which makes it easy to
+ * wipe the wrong database while believing you are pointed at another.
+ */
+function describeTarget() {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL is not set.");
+
+  return url.match(/@([^/?]+)/)?.[1] ?? "unknown host";
+}
+
 async function main() {
+  console.log(`Target database: ${describeTarget()}\n`);
+
   const existingShipments = await prisma.shipmentLog.count();
   if (existingShipments > 0 && process.env.ALLOW_DESTRUCTIVE_SEED !== "true") {
     throw new Error(
