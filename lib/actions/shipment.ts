@@ -232,6 +232,14 @@ export async function toggleShipmentFlag(
 
 
 export interface UpdateShipmentInput {
+  date: string;
+  truckId?: string | null;
+  plateNumber: string;
+  client: string;
+  clientNumber: string;
+  shipmentNumber: string;
+  waybillNumber: string;
+  farthestRoute: string;
   driver: string;
   helper: string;
   extraHelper?: string | null;
@@ -258,14 +266,69 @@ export async function updateShipment(
 
     const existing = await prisma.shipmentLog.findUnique({
       where: { id },
-      select: { id: true },
     });
 
     if (!existing) {
       return { success: false, error: "Shipment not found." };
     }
 
-    const [driverId, helperId] = await Promise.all([
+    if (!input.plateNumber?.trim()) {
+      return { success: false, error: "Plate number is required." };
+    }
+    if (!input.shipmentNumber?.trim()) {
+      return { success: false, error: "Shipment number is required." };
+    }
+    if (!input.driver?.trim()) {
+      return { success: false, error: "Driver is required." };
+    }
+    if (!input.farthestRoute?.trim()) {
+      return { success: false, error: "Farthest route is required." };
+    }
+    if (!input.date?.trim()) {
+      return { success: false, error: "Date is required." };
+    }
+
+    const clientId = await resolveClientId(input.client);
+    if (!clientId) {
+      return {
+        success: false,
+        error: `Client "${input.client}" was not found in the database.`,
+      };
+    }
+
+    const hasExtraHelper = Boolean(input.extraHelper?.trim());
+    let driverPayout = existing.driverPayout;
+    let helperPayout = existing.helperPayout;
+    let extraHelperPayout = existing.extraHelperPayout;
+    let distance = existing.distance;
+
+    if (isDestinationClient(input.client)) {
+      const selectedRoute = getDefaultRouteRate(
+        input.client as DestinationClient,
+        input.farthestRoute
+      );
+      const payout = calculateDestinationPayout({
+        client: input.client as DestinationClient,
+        routeName: input.farthestRoute,
+        distance: selectedRoute?.distance ?? "",
+        hasExtraHelper,
+      });
+
+      if (!payout) {
+        return {
+          success: false,
+          error: `No payout rate found for route "${input.farthestRoute}".`,
+        };
+      }
+
+      driverPayout = payout.driverPayout;
+      helperPayout = payout.helperPayout;
+      extraHelperPayout = payout.extraHelperPayout;
+      distance = selectedRoute?.distance || null;
+    }
+
+    const [truckId, driverId, helperId] = await Promise.all([
+      resolveTruckId(input.truckId, input.plateNumber),
       resolveEmployeeId(input.driver),
       input.helper ? resolveEmployeeId(input.helper) : Promise.resolve(null),
     ]);
@@ -273,18 +336,30 @@ export async function updateShipment(
     const updated = await prisma.shipmentLog.update({
       where: { id },
       data: {
+        date: new Date(input.date),
+        plateNumber: input.plateNumber,
+        truckId,
+        shipmentNumber: input.shipmentNumber,
+        clientNumber: input.clientNumber || null,
+        waybillNumber: input.waybillNumber || null,
+        routeName: input.farthestRoute,
+        distance,
         driverName: input.driver,
         driverId,
         helperName: input.helper || null,
         helperId,
-        extraHelperName: input.extraHelper || null,
-        hasExtraHelper: Boolean(input.extraHelper),
-        extraHelperNote: input.extraHelper
+        extraHelperName: hasExtraHelper ? input.extraHelper || null : null,
+        hasExtraHelper,
+        extraHelperNote: hasExtraHelper
           ? trimOrNull(input.extraHelperNote)
           : null,
         remarks: updateRemarks(input),
         isFlagged: input.flagged,
         isApproved: input.approved,
+        driverPayout,
+        helperPayout,
+        extraHelperPayout,
+        clientId,
       },
       include: { client: { select: { name: true } } },
     });
@@ -305,6 +380,44 @@ export async function updateShipment(
         error instanceof Error
           ? error.message
           : "An unexpected error occurred while updating the shipment.",
+    };
+  }
+}
+
+export type DeleteShipmentResult =
+  | { success: true }
+  | { success: false; error: string };
+
+export async function deleteShipment(
+  id: string
+): Promise<DeleteShipmentResult> {
+  try {
+    await requireAdmin();
+
+    const existing = await prisma.shipmentLog.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!existing) {
+      return { success: false, error: "Shipment not found." };
+    }
+
+    await prisma.shipmentLog.delete({ where: { id } });
+
+    revalidatePath("/");
+    revalidatePath("/employee/profile");
+    revalidatePath("/admin/employees");
+
+    return { success: true };
+  } catch (error) {
+    console.error("[deleteShipment]", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred while deleting the shipment.",
     };
   }
 }

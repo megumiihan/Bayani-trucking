@@ -5,6 +5,7 @@ import { useRole } from "@/context/RoleContext";
 import {
   formatCurrency,
   sortShipmentsByDateDesc,
+  type Employee,
   type Shipment,
 } from "@/lib/mockData";
 import {
@@ -19,24 +20,43 @@ import {
   type ShipmentFilters,
 } from "@/lib/shipmentFilters";
 import { exportShipmentsToExcel } from "@/lib/exportShipments";
-import { toggleShipmentFlag, updateShipment } from "@/lib/actions/shipment";
+import {
+  deleteShipment,
+  toggleShipmentFlag,
+  updateShipment,
+  type UpdateShipmentInput,
+} from "@/lib/actions/shipment";
+import type { Client } from "@/lib/clients";
 import { getUserDisplayName } from "@/lib/mockUsers";
+import type { Truck } from "@/lib/trucks";
 import ShipmentFiltersBar from "@/components/admin/ShipmentFiltersBar";
+import DeleteShipmentModal from "@/components/admin/DeleteShipmentModal";
 import EditShipmentModal from "@/components/admin/EditShipmentModal";
 import Badge from "@/components/ui/Badge";
 import PageHeader from "@/components/ui/PageHeader";
 
 interface AdminMasterDashboardProps {
   initialShipments: Shipment[];
+  employees: Employee[];
+  trucks: Truck[];
+  lookupClients: Client[];
 }
 
 export default function AdminMasterDashboard({
   initialShipments,
+  employees,
+  trucks,
+  lookupClients,
 }: AdminMasterDashboardProps) {
   const { role } = useRole();
   const [shipments, setShipments] = useState(initialShipments);
   const [filters, setFilters] = useState<ShipmentFilters>(defaultShipmentFilters);
   const [editingShipment, setEditingShipment] = useState<Shipment | null>(null);
+  const [deletingShipment, setDeletingShipment] = useState<Shipment | null>(
+    null
+  );
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [flaggingId, setFlaggingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -78,25 +98,37 @@ export default function AdminMasterDashboard({
 
   const handleUpdateShipment = async (
     id: string,
-    updates: Partial<Shipment>
+    updates: UpdateShipmentInput
   ) => {
-    const result = await updateShipment(id, {
-      driver: updates.driver ?? "",
-      helper: updates.helper ?? "",
-      extraHelper: updates.extraHelper,
-      extraHelperNote: updates.extraHelperNote,
-      remarks: updates.remarks,
-      flagged: updates.flagged ?? false,
-      approved: updates.approved ?? false,
-    });
+    const result = await updateShipment(id, updates);
 
     if (result.success) {
       setShipments((current) =>
         current.map((shipment) =>
-          shipment.id === id ? result.shipment: shipment
+          shipment.id === id ? result.shipment : shipment
         )
       );
+      return { success: true as const };
     }
+
+    return { success: false as const, error: result.error };
+  };
+
+  const handleDeleteShipment = async (id: string) => {
+    if (isDeleting) return;
+
+    setIsDeleting(true);
+    setDeleteError(null);
+    const result = await deleteShipment(id);
+    setIsDeleting(false);
+
+    if (!result.success) {
+      setDeleteError(result.error);
+      return;
+    }
+
+    setShipments((current) => current.filter((shipment) => shipment.id !== id));
+    setDeletingShipment(null);
   };
 
   if (role !== "admin") {
@@ -211,6 +243,10 @@ export default function AdminMasterDashboard({
                     onToggleFlag={() => handleToggleFlag(shipment.id)}
                     onEdit={() => setEditingShipment(shipment)}
                     onFlag={() => handleToggleFlag(shipment.id)}
+                    onDelete={() => {
+                      setDeleteError(null);
+                      setDeletingShipment(shipment);
+                    }}
                   />
                 ))
               )}
@@ -221,8 +257,23 @@ export default function AdminMasterDashboard({
 
       <EditShipmentModal
         shipment={editingShipment}
+        employees={employees}
+        trucks={trucks}
+        clients={lookupClients}
         onClose={() => setEditingShipment(null)}
         onSave={handleUpdateShipment}
+      />
+
+      <DeleteShipmentModal
+        shipment={deletingShipment}
+        isDeleting={isDeleting}
+        error={deleteError}
+        onClose={() => {
+          if (isDeleting) return;
+          setDeletingShipment(null);
+          setDeleteError(null);
+        }}
+        onConfirm={handleDeleteShipment}
       />
     </div>
   );
@@ -234,12 +285,14 @@ function MasterTableRow({
   onToggleFlag,
   onEdit,
   onFlag,
+  onDelete,
 }: {
   shipment: Shipment;
   isFlagging: boolean;
   onToggleFlag: () => void;
   onEdit: () => void;
   onFlag: () => void;
+  onDelete: () => void;
 }) {
   const driverRate = getDriverPayoutForShipment(
     shipment.farthestRoute,
@@ -360,6 +413,13 @@ function MasterTableRow({
             className="rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-50"
           >
             {shipment.flagged ? "Unflag" : "Flag"}
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+          >
+            Delete
           </button>
         </div>
       </td>
