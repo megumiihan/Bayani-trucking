@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import type { ShipmentLog } from "@prisma/client";
 import { requireAdmin, requireUser } from "@/lib/auth";
-import { calculateDestinationPayout } from "@/lib/calculations";
+import {
+  calculateDestinationPayout,
+  calculateLivestockPayout,
+} from "@/lib/calculations";
+import { LIVESTOCK_MAX_HEADS, parsePighead } from "@/lib/livestock";
 import { isDestinationClient } from "@/lib/clients";
 import { mapShipmentLogToShipment } from "@/lib/mappers/shipmentLog";
 import { trimOrNull } from "@/lib/mappers/shipmentRemarks";
@@ -32,18 +36,24 @@ export interface ShipmentFormInput {
   remarks?: string;
   weightKg?: number | null;
   headCount?: number | null;
+  pigheadCount?: number | null;
 }
 
 export type SaveShipmentResult =
   | { success: true; record: ShipmentLog }
   | { success: false; error: string };
 
-async function resolveClientId(clientName: string): Promise<string | null> {
-  const client = await prisma.client.findUnique({
+async function resolveClient(clientName: string) {
+  return prisma.client.findUnique({
     where: { name: clientName },
-    select: { id: true },
+    select: {
+      id: true,
+      name: true,
+      calcType: true,
+      pigheadDriverRate: true,
+      pigheadHelperRate: true,
+    },
   });
-  return client?.id ?? null;
 }
 
 async function resolveTruckId(
@@ -77,6 +87,106 @@ function buildRemarks(input: ShipmentFormInput): string | null {
   return trimOrNull(input.remarks);
 }
 
+type ResolvedPayout =
+  | {
+      ok: true;
+      payout: {
+        driverPayout: number;
+        helperPayout: number;
+        extraHelperPayout: number;
+      };
+      distance: string | null;
+      pigheadCount: number | null;
+    }
+  | { ok: false; error: string };
+
+async function resolvePayout(input: {
+  client: {
+    id: string;
+    name: string;
+    calcType: "DESTINATION" | "WEIGHT" | "ANIMAL_HEADCOUNT" | "PLATFORM";
+    pigheadDriverRate: number | null;
+    pigheadHelperRate: number | null;
+  };
+  farthestRoute: string;
+  hasExtraHelper: boolean;
+  pigheadCount?: number | null;
+}): Promise<ResolvedPayout> {
+  if (input.client.calcType === "ANIMAL_HEADCOUNT") {
+    const pigheadCount = parsePighead(input.pigheadCount);
+    if (pigheadCount == null) {
+      return {
+        ok: false,
+        error: `Enter a number of heads between 1 and ${LIVESTOCK_MAX_HEADS} for livestock clients.`,
+      };
+    }
+
+    const route = await prisma.destinationRoute.findFirst({
+      where: {
+        clientId: input.client.id,
+        routeName: input.farthestRoute,
+      },
+    });
+
+    if (!route) {
+      return {
+        ok: false,
+        error: `No livestock route found for "${input.farthestRoute}". Add it on Routes & Rates.`,
+      };
+    }
+
+    const payout = calculateLivestockPayout({
+      pighead: pigheadCount,
+      driverBase: route.driverBaseRate,
+      helperBase: route.helperBaseRate,
+      driverRate: input.client.pigheadDriverRate ?? NaN,
+      helperRate: input.client.pigheadHelperRate ?? NaN,
+      hasExtraHelper: input.hasExtraHelper,
+    });
+
+    if (!payout) {
+      return {
+        ok: false,
+        error: `Set per-head rates for ${input.client.name} on Routes & Rates.`,
+      };
+    }
+
+    return { ok: true, payout, distance: route.distance || null, pigheadCount };
+  }
+
+  if (isDestinationClient(input.client.name)) {
+    const selectedRoute = getDefaultRouteRate(
+      input.client.name as DestinationClient,
+      input.farthestRoute
+    );
+    const payout = calculateDestinationPayout({
+      client: input.client.name as DestinationClient,
+      routeName: input.farthestRoute,
+      distance: selectedRoute?.distance ?? "",
+      hasExtraHelper: input.hasExtraHelper,
+    });
+
+    if (!payout) {
+      return {
+        ok: false,
+        error: `No payout rate found for route "${input.farthestRoute}".`,
+      };
+    }
+
+    return {
+      ok: true,
+      payout,
+      distance: selectedRoute?.distance || null,
+      pigheadCount: null,
+    };
+  }
+
+  return {
+    ok: false,
+    error: `Payout calculation for "${input.client.name}" is not supported yet.`,
+  };
+}
+
 export async function saveShipment(
   input: ShipmentFormInput
 ): Promise<SaveShipmentResult> {
@@ -96,38 +206,22 @@ export async function saveShipment(
       return { success: false, error: "Farthest route is required." };
     }
 
-    const clientId = await resolveClientId(input.client);
-    if (!clientId) {
+    const client = await resolveClient(input.client);
+    if (!client) {
       return {
         success: false,
         error: `Client "${input.client}" was not found in the database.`,
       };
     }
 
-    if (!isDestinationClient(input.client)) {
-      return {
-        success: false,
-        error: `Payout calculation for "${input.client}" is not supported yet.`,
-      };
-    }
-
-    const selectedRoute = getDefaultRouteRate(
-      input.client as DestinationClient,
-      input.farthestRoute
-    );
-
-    const payout = calculateDestinationPayout({
-      client: input.client as DestinationClient,
-      routeName: input.farthestRoute,
-      distance: selectedRoute?.distance ?? "",
+    const resolved = await resolvePayout({
+      client,
+      farthestRoute: input.farthestRoute,
       hasExtraHelper: input.hasExtraHelper,
+      pigheadCount: input.pigheadCount,
     });
-
-    if (!payout) {
-      return {
-        success: false,
-        error: `No payout rate found for route "${input.farthestRoute}".`,
-      };
+    if (!resolved.ok) {
+      return { success: false, error: resolved.error };
     }
 
     const [truckId, driverId, helperId] = await Promise.all([
@@ -145,9 +239,10 @@ export async function saveShipment(
         clientNumber: input.clientNumber || null,
         waybillNumber: input.waybillNumber || null,
         routeName: input.farthestRoute,
-        distance: selectedRoute?.distance || null,
+        distance: resolved.distance,
         weightKg: input.weightKg ?? null,
         headCount: input.headCount ?? null,
+        pigheadCount: resolved.pigheadCount,
         driverName: input.driver,
         driverId,
         helperName: input.helper || null,
@@ -158,12 +253,12 @@ export async function saveShipment(
           ? trimOrNull(input.extraHelperNote)
           : null,
         isDriverAsHelper: false,
-        driverPayout: payout.driverPayout,
-        helperPayout: payout.helperPayout,
-        extraHelperPayout: payout.extraHelperPayout,
+        driverPayout: resolved.payout.driverPayout,
+        helperPayout: resolved.payout.helperPayout,
+        extraHelperPayout: resolved.payout.extraHelperPayout,
         remarks: buildRemarks(input),
         isFlagged: false,
-        clientId,
+        clientId: client.id,
         createdById: user.id,
       },
     });
@@ -247,6 +342,7 @@ export interface UpdateShipmentInput {
   remarks?: string | null;
   flagged: boolean;
   approved: boolean;
+  pigheadCount?: number | null;
 }
 
 export type UpdateShipmentResult =
@@ -288,8 +384,8 @@ export async function updateShipment(
       return { success: false, error: "Date is required." };
     }
 
-    const clientId = await resolveClientId(input.client);
-    if (!clientId) {
+    const client = await resolveClient(input.client);
+    if (!client) {
       return {
         success: false,
         error: `Client "${input.client}" was not found in the database.`,
@@ -297,35 +393,20 @@ export async function updateShipment(
     }
 
     const hasExtraHelper = Boolean(input.extraHelper?.trim());
-    let driverPayout = existing.driverPayout;
-    let helperPayout = existing.helperPayout;
-    let extraHelperPayout = existing.extraHelperPayout;
-    let distance = existing.distance;
-
-    if (isDestinationClient(input.client)) {
-      const selectedRoute = getDefaultRouteRate(
-        input.client as DestinationClient,
-        input.farthestRoute
-      );
-      const payout = calculateDestinationPayout({
-        client: input.client as DestinationClient,
-        routeName: input.farthestRoute,
-        distance: selectedRoute?.distance ?? "",
-        hasExtraHelper,
-      });
-
-      if (!payout) {
-        return {
-          success: false,
-          error: `No payout rate found for route "${input.farthestRoute}".`,
-        };
-      }
-
-      driverPayout = payout.driverPayout;
-      helperPayout = payout.helperPayout;
-      extraHelperPayout = payout.extraHelperPayout;
-      distance = selectedRoute?.distance || null;
+    const resolved = await resolvePayout({
+      client,
+      farthestRoute: input.farthestRoute,
+      hasExtraHelper,
+      pigheadCount: input.pigheadCount,
+    });
+    if (!resolved.ok) {
+      return { success: false, error: resolved.error };
     }
+
+    const { payout, distance, pigheadCount } = resolved;
+    const driverPayout = payout.driverPayout;
+    const helperPayout = payout.helperPayout;
+    const extraHelperPayout = payout.extraHelperPayout;
 
     const [truckId, driverId, helperId] = await Promise.all([
       resolveTruckId(input.truckId, input.plateNumber),
@@ -344,6 +425,7 @@ export async function updateShipment(
         waybillNumber: input.waybillNumber || null,
         routeName: input.farthestRoute,
         distance,
+        pigheadCount,
         driverName: input.driver,
         driverId,
         helperName: input.helper || null,
@@ -359,7 +441,7 @@ export async function updateShipment(
         driverPayout,
         helperPayout,
         extraHelperPayout,
-        clientId,
+        clientId: client.id,
       },
       include: { client: { select: { name: true } } },
     });

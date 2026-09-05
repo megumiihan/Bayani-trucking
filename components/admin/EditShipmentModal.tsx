@@ -2,10 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Employee, Shipment } from "@/lib/mockData";
-import {
-  isDestinationClient,
-  type Client,
-} from "@/lib/clients";
+import { isLivestockClient, type Client } from "@/lib/clients";
+import { LIVESTOCK_MAX_HEADS } from "@/lib/livestock";
+import type { DestinationRouteRate } from "@/lib/rates";
 import { formatTruckLabel, type Truck } from "@/lib/trucks";
 import {
   getUniqueRouteNamesForClient,
@@ -19,6 +18,7 @@ interface EditShipmentModalProps {
   employees: Employee[];
   trucks: Truck[];
   clients: Client[];
+  routes: DestinationRouteRate[];
   onClose: () => void;
   onSave: (
     id: string,
@@ -43,6 +43,7 @@ type EditForm = {
   remarks: string;
   flagged: boolean;
   approved: boolean;
+  pigheadCount: string;
 };
 
 function toForm(shipment: Shipment): EditForm {
@@ -63,6 +64,7 @@ function toForm(shipment: Shipment): EditForm {
     remarks: shipment.remarks,
     flagged: shipment.flagged,
     approved: shipment.approved,
+    pigheadCount: shipment.pigheadCount != null ? String(shipment.pigheadCount) : "",
   };
 }
 
@@ -71,6 +73,7 @@ export default function EditShipmentModal({
   employees,
   trucks,
   clients,
+  routes,
   onClose,
   onSave,
 }: EditShipmentModalProps) {
@@ -113,7 +116,10 @@ export default function EditShipmentModal({
 
   if (!shipment || !form) return null;
 
-  const usesDestinationRates = isDestinationClient(form.client);
+  const selectedClient = clients.find((client) => client.name === form.client);
+  const usesDestinationRates = selectedClient?.calculationType === "Destination";
+  const usesLivestockRates = isLivestockClient(selectedClient);
+  const livestockRoutes = routes.filter((route) => route.client === form.client);
   const routeOptions = usesDestinationRates
     ? getUniqueRouteNamesForClient(form.client as DestinationClient)
     : [];
@@ -142,6 +148,7 @@ export default function EditShipmentModal({
             client: client.name,
             clientNumber: client.id,
             farthestRoute: "",
+            pigheadCount: "",
           }
         : current
     );
@@ -170,6 +177,7 @@ export default function EditShipmentModal({
       remarks: form.remarks,
       flagged: form.flagged,
       approved: form.approved,
+      pigheadCount: usesLivestockRates ? Number(form.pigheadCount) : null,
     });
 
     setIsSaving(false);
@@ -285,6 +293,22 @@ export default function EditShipmentModal({
                     placeholder="Type to search farthest route…"
                     required
                   />
+                ) : livestockRoutes.length > 0 ? (
+                  <select
+                    required
+                    value={form.farthestRoute}
+                    onChange={(e) =>
+                      updateField("farthestRoute", e.target.value)
+                    }
+                    className={inputClass}
+                  >
+                    <option value="">Select farthest route</option>
+                    {livestockRoutes.map((route) => (
+                      <option key={route.id} value={route.routeName}>
+                        {route.routeName}
+                      </option>
+                    ))}
+                  </select>
                 ) : (
                   <input
                     type="text"
@@ -297,6 +321,23 @@ export default function EditShipmentModal({
                   />
                 )}
               </Field>
+
+              {usesLivestockRates && (
+                <Field label="Number of heads" required>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={LIVESTOCK_MAX_HEADS}
+                    step={1}
+                    required
+                    value={form.pigheadCount}
+                    onChange={(e) => updateField("pigheadCount", e.target.value)}
+                    placeholder="e.g. 8"
+                    className={inputClass}
+                  />
+                </Field>
+              )}
 
               <Field label="Driver" required>
                 <select

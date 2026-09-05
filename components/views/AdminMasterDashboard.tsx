@@ -29,6 +29,7 @@ import {
 import type { Client } from "@/lib/clients";
 import { getUserDisplayName } from "@/lib/mockUsers";
 import type { Truck } from "@/lib/trucks";
+import type { DestinationRouteRate } from "@/lib/rates";
 import ShipmentFiltersBar from "@/components/admin/ShipmentFiltersBar";
 import DeleteShipmentModal from "@/components/admin/DeleteShipmentModal";
 import EditShipmentModal from "@/components/admin/EditShipmentModal";
@@ -40,6 +41,7 @@ interface AdminMasterDashboardProps {
   employees: Employee[];
   trucks: Truck[];
   lookupClients: Client[];
+  routes: DestinationRouteRate[];
 }
 
 export default function AdminMasterDashboard({
@@ -47,6 +49,7 @@ export default function AdminMasterDashboard({
   employees,
   trucks,
   lookupClients,
+  routes,
 }: AdminMasterDashboardProps) {
   const { role } = useRole();
   const [shipments, setShipments] = useState(initialShipments);
@@ -260,6 +263,7 @@ export default function AdminMasterDashboard({
         employees={employees}
         trucks={trucks}
         clients={lookupClients}
+        routes={routes}
         onClose={() => setEditingShipment(null)}
         onSave={handleUpdateShipment}
       />
@@ -362,7 +366,10 @@ function MasterTableRow({
         <p className="font-mono text-xs text-gray-500">{shipment.waybillNumber}</p>
       </td>
       <td className="whitespace-nowrap border-r border-gray-100 px-3 py-3 text-gray-700">
-        {shipment.farthestRoute}
+        <p>{shipment.farthestRoute}</p>
+        {shipment.pigheadCount != null && (
+          <p className="text-xs text-gray-500">{shipment.pigheadCount} heads</p>
+        )}
       </td>
       <td className="border-r border-gray-100 px-3 py-3">
         <p className="font-medium text-gray-900">{shipment.driver}</p>

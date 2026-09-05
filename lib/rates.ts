@@ -10,7 +10,7 @@ export type { DestinationClientName };
 
 export interface DestinationRouteRate {
   id: string;
-  client: DestinationClient;
+  client: string;
   routeName: string;
   /** Distance band from rate sheet, e.g. "1-120KM". Empty for Big Mak area routes. */
   distance: string;

@@ -80,10 +80,12 @@ model Truck {
 
 // 3. CLIENT MANAGEMENT
 model Client {
-  id        String          @id @default(uuid())
-  name      String          @unique
-  calcType  CalculationType @default(DESTINATION)
-  createdAt DateTime        @default(now())
+  id                 String          @id @default(uuid())
+  name               String          @unique
+  calcType           CalculationType @default(DESTINATION)
+  pigheadDriverRate Float?
+  pigheadHelperRate Float?
+  createdAt          DateTime        @default(now())
 
   routes    DestinationRoute[]
   shipments ShipmentLog[]
@@ -131,6 +133,7 @@ model ShipmentLog {
   distance   String?
   weightKg   Float?
   headCount  Int?
+  pigheadCount Int?
 
   // --- Personnel Involved ---
   driverName String // Snapshot driver name

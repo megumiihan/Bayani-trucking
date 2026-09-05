@@ -48,6 +48,7 @@ export interface Shipment {
   driverPayout?: number;
   helperPayout?: number;
   extraHelperPayout?: number;
+  pigheadCount?: number | null;
 }
 
 export interface RouteRate {

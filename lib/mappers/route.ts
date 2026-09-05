@@ -1,5 +1,5 @@
 import type { DestinationRoute as DbDestinationRoute } from "@prisma/client";
-import type { DestinationClient, DestinationRouteRate } from "@/lib/rates";
+import type { DestinationRouteRate } from "@/lib/rates";
 import { formatRouteDescription } from "@/lib/rates";
 
 export type DbDestinationRouteWithClient = DbDestinationRoute & {
@@ -11,7 +11,7 @@ export function mapDestinationRouteToUi(
 ): DestinationRouteRate {
   const rate = {
     id: record.id,
-    client: record.client.name as DestinationClient,
+    client: record.client.name,
     routeName: record.routeName,
     distance: record.distance,
     driverBaseRate: record.driverBaseRate,

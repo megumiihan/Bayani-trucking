@@ -1,3 +1,4 @@
+import { parsePighead } from "./livestock";
 import {
   getDestinationRoute,
   getDestinationRouteById,
@@ -49,5 +50,43 @@ export function calculateDestinationPayout({
     driverPayout: rate.driverBaseRate,
     helperPayout: rate.helperBaseRate,
     extraHelperPayout,
+  };
+}
+
+export interface LivestockPayoutInput {
+  pighead: number;
+  driverBase: number;
+  helperBase: number;
+  driverRate: number;
+  helperRate: number;
+  hasExtraHelper: boolean;
+}
+
+/**
+ * Livestock payouts: role base + (heads × that role's per-head rate).
+ * Extra helper uses the helper base and helper per-head rate.
+ */
+export function calculateLivestockPayout({
+  pighead,
+  driverBase,
+  helperBase,
+  driverRate,
+  helperRate,
+  hasExtraHelper,
+}: LivestockPayoutInput): DestinationPayoutResult | null {
+  const heads = parsePighead(pighead);
+  if (heads == null) return null;
+  if (!Number.isFinite(driverBase) || driverBase < 0) return null;
+  if (!Number.isFinite(helperBase) || helperBase < 0) return null;
+  if (!Number.isFinite(driverRate) || driverRate < 0) return null;
+  if (!Number.isFinite(helperRate) || helperRate < 0) return null;
+
+  const driverPayout = driverBase + heads * driverRate;
+  const helperPayout = helperBase + heads * helperRate;
+
+  return {
+    driverPayout,
+    helperPayout,
+    extraHelperPayout: hasExtraHelper ? helperPayout : 0,
   };
 }

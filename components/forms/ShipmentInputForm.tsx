@@ -6,15 +6,20 @@ import { formatCurrency, type Employee } from "@/lib/mockData";
 import { formatTruckLabel, type Truck } from "@/lib/trucks";
 import {
   getCalculationTypeLabel,
-  isDestinationClient,
+  isLivestockClient,
   type Client,
 } from "@/lib/clients";
+import { LIVESTOCK_MAX_HEADS } from "@/lib/livestock";
+import type { DestinationRouteRate } from "@/lib/rates";
 import {
   getUniqueRouteNamesForClient,
   getDefaultRouteRate,
   type DestinationClient,
 } from "@/lib/rates";
-import { calculateDestinationPayout } from "@/lib/calculations";
+import {
+  calculateDestinationPayout,
+  calculateLivestockPayout,
+} from "@/lib/calculations";
 import { saveShipment } from "@/lib/actions/shipment";
 import { useRole } from "@/context/RoleContext";
 import PageHeader from "@/components/ui/PageHeader";
@@ -28,12 +33,14 @@ interface ShipmentInputFormProps {
   employees: Employee[];
   trucks: Truck[];
   clients: Client[];
+  routes: DestinationRouteRate[];
 }
 
 export default function ShipmentInputForm({
   employees,
   trucks,
   clients,
+  routes,
 }: ShipmentInputFormProps) {
   const router = useRouter();
   const { isAdmin } = useRole();
@@ -55,6 +62,7 @@ export default function ShipmentInputForm({
     extraHelper: "",
     extraHelperNote: "",
     remarks: "",
+    pigheadCount: "",
   };
 
   const [form, setForm] = useState(initialForm);
@@ -84,15 +92,25 @@ export default function ShipmentInputForm({
   );
 
   const selectedClient = clients.find((client) => client.name === form.client);
-  const usesDestinationRates = isDestinationClient(form.client);
-
-  const routeOptions = useMemo(
-    () =>
-      usesDestinationRates
-        ? getUniqueRouteNamesForClient(form.client as DestinationClient)
-        : [],
-    [form.client, usesDestinationRates]
+  const usesDestinationRates = selectedClient?.calculationType === "Destination";
+  const usesLivestockRates = isLivestockClient(selectedClient);
+  const livestockRoutes = routes.filter(
+    (route) => route.client === form.client
   );
+  const selectedLivestockRoute = livestockRoutes.find(
+    (route) => route.routeName === form.farthestRoute
+  );
+  const driverBase = selectedLivestockRoute?.driverBaseRate ?? 0;
+  const helperBase = selectedLivestockRoute?.helperBaseRate ?? 0;
+  const driverHeadRate = selectedClient?.pigheadDriverRate ?? null;
+  const helperHeadRate = selectedClient?.pigheadHelperRate ?? null;
+
+  const routeOptions = useMemo(() => {
+    if (usesDestinationRates) {
+      return getUniqueRouteNamesForClient(form.client as DestinationClient);
+    }
+    return [];
+  }, [form.client, usesDestinationRates]);
 
   const selectedRoute = useMemo(
     () =>
@@ -102,24 +120,39 @@ export default function ShipmentInputForm({
     [form.client, form.farthestRoute, usesDestinationRates]
   );
 
-  const payoutPreview = useMemo(
-    () =>
-      usesDestinationRates && form.farthestRoute && selectedRoute
-        ? calculateDestinationPayout({
-            client: form.client as DestinationClient,
-            routeName: form.farthestRoute,
-            distance: selectedRoute.distance,
-            hasExtraHelper: form.hasExtraHelper,
-          })
-        : null,
-    [
-      form.client,
-      form.farthestRoute,
-      form.hasExtraHelper,
-      selectedRoute,
-      usesDestinationRates,
-    ]
-  );
+  const payoutPreview = useMemo(() => {
+    if (usesLivestockRates && driverHeadRate != null && helperHeadRate != null) {
+      return calculateLivestockPayout({
+        pighead: Number(form.pigheadCount),
+        driverBase,
+        helperBase,
+        driverRate: driverHeadRate,
+        helperRate: helperHeadRate,
+        hasExtraHelper: form.hasExtraHelper,
+      });
+    }
+    if (usesDestinationRates && form.farthestRoute && selectedRoute) {
+      return calculateDestinationPayout({
+        client: form.client as DestinationClient,
+        routeName: form.farthestRoute,
+        distance: selectedRoute.distance,
+        hasExtraHelper: form.hasExtraHelper,
+      });
+    }
+    return null;
+  }, [
+    driverBase,
+    driverHeadRate,
+    form.client,
+    form.farthestRoute,
+    form.hasExtraHelper,
+    form.pigheadCount,
+    helperBase,
+    helperHeadRate,
+    selectedRoute,
+    usesDestinationRates,
+    usesLivestockRates,
+  ]);
 
   const updateField = <K extends keyof typeof form>(
     key: K,
@@ -148,6 +181,7 @@ export default function ShipmentInputForm({
       client: client.name,
       clientNumber: client.id,
       farthestRoute: "",
+      pigheadCount: "",
     }));
   };
 
@@ -174,6 +208,7 @@ export default function ShipmentInputForm({
       extraHelper: form.extraHelper,
       extraHelperNote: form.extraHelperNote,
       remarks: form.remarks,
+      pigheadCount: usesLivestockRates ? Number(form.pigheadCount) : null,
     });
 
     setIsSubmitting(false);
@@ -331,6 +366,20 @@ export default function ShipmentInputForm({
                     placeholder="Type to search farthest route…"
                     required
                   />
+                ) : livestockRoutes.length > 0 ? (
+                  <select
+                    required
+                    value={form.farthestRoute}
+                    onChange={(e) => updateField("farthestRoute", e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="">Select farthest route</option>
+                    {livestockRoutes.map((route) => (
+                      <option key={route.id} value={route.routeName}>
+                        {route.routeName}
+                      </option>
+                    ))}
+                  </select>
                 ) : (
                   <input
                     type="text"
@@ -342,6 +391,27 @@ export default function ShipmentInputForm({
                   />
                 )}
               </Field>
+
+              {usesLivestockRates && (
+                <Field label="Number of heads" required>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={LIVESTOCK_MAX_HEADS}
+                    step={1}
+                    required
+                    value={form.pigheadCount}
+                    onChange={(e) => updateField("pigheadCount", e.target.value)}
+                    placeholder="e.g. 8"
+                    className={inputClass}
+                  />
+                  <span className="mt-1 block text-xs text-gray-500">
+                    Driver ₱{driverBase} + ₱{driverHeadRate ?? "—"}/head · Helper
+                    ₱{helperBase} + ₱{helperHeadRate ?? "—"}/head
+                  </span>
+                </Field>
+              )}
             </div>
           </FormSection>
 
@@ -482,14 +552,16 @@ export default function ShipmentInputForm({
               Live Payout Preview
             </h3>
             <p className="mt-1 text-xs text-blue-600">
-              {usesDestinationRates
-                ? `${form.client} destination-based rates`
-                : selectedClient
-                  ? `${getCalculationTypeLabel(selectedClient.calculationType)} calculation — preview coming soon`
-                  : "Select a client to preview payouts"}
+              {usesLivestockRates
+                ? `${form.client} livestock · base + heads × per-head rate`
+                : usesDestinationRates
+                  ? `${form.client} destination-based rates`
+                  : selectedClient
+                    ? `${getCalculationTypeLabel(selectedClient.calculationType)} calculation — preview coming soon`
+                    : "Select a client to preview payouts"}
             </p>
 
-            {payoutPreview && selectedRoute ? (
+            {payoutPreview ? (
               <div className="mt-5 space-y-4">
                 <div className="rounded-lg bg-white p-4 shadow-sm">
                   <p className="text-xs font-medium uppercase tracking-wider text-gray-500">
@@ -499,8 +571,9 @@ export default function ShipmentInputForm({
                     {form.client} · {form.farthestRoute}
                   </p>
                   <p className="text-xs text-gray-500">
-                    Estimated rates — final payout may vary once distance is
-                    confirmed by operations
+                    {usesLivestockRates
+                      ? `₱${driverBase} + ${form.pigheadCount || 0} × ₱${driverHeadRate ?? 0} driver · ₱${helperBase} + ${form.pigheadCount || 0} × ₱${helperHeadRate ?? 0} helper`
+                      : "Estimated rates — final payout may vary once distance is confirmed by operations"}
                   </p>
                 </div>
 
@@ -538,9 +611,11 @@ export default function ShipmentInputForm({
               </div>
             ) : (
               <p className="mt-5 text-sm text-blue-700">
-                {usesDestinationRates
-                  ? "Select a client and farthest route to preview destination-based payouts."
-                  : "Payout preview for this client type will be available once its calculation logic is added."}
+                {usesLivestockRates
+                  ? "Select a farthest route and number of heads to preview livestock payouts."
+                  : usesDestinationRates
+                    ? "Select a client and farthest route to preview destination-based payouts."
+                    : "Payout preview for this client type will be available once its calculation logic is added."}
               </p>
             )}
           </div>

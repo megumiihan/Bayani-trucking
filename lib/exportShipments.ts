@@ -22,6 +22,7 @@ function shipmentToMasterRow(shipment: Shipment) {
     "Shipment #": shipment.shipmentNumber,
     "Client #": shipment.clientNumber,
     "Waybill #": shipment.waybillNumber,
+    "Pig heads": shipment.pigheadCount ?? "",
     "Farthest Route": shipment.distanceBand
       ? `${shipment.farthestRoute} (${shipment.distanceBand})`
       : shipment.farthestRoute,

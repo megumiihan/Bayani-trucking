@@ -1,22 +1,35 @@
+import { getClients } from "@/lib/queries/clients";
 import { getDestinationRoutes } from "@/lib/queries/routes";
+import { isLivestockClient } from "@/lib/clients";
 import { formatCurrency } from "@/lib/mockData";
+import LivestockRatesPanel from "@/components/admin/LivestockRatesPanel";
 import PageHeader from "@/components/ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
 export default async function RoutesPage() {
-  const destinationRates = await getDestinationRoutes();
-  const clients = Array.from(new Set(destinationRates.map((r) => r.client)));
+  const [destinationRates, allClients] = await Promise.all([
+    getDestinationRoutes(),
+    getClients(),
+  ]);
+  const destinationClients = Array.from(
+    new Set(destinationRates.map((r) => r.client))
+  );
+  const livestockClients = allClients.filter((client) =>
+    isLivestockClient(client)
+  );
 
   return (
     <div>
       <PageHeader
         title="Routes & Rates"
-        description="Destination-based pricing for Pepsi, Big Mak, and Roadwise."
+        description="Destination pricing plus livestock per-head rates."
       />
 
       <div className="space-y-8">
-        {clients.map((client) => {
+        <LivestockRatesPanel clients={livestockClients} />
+
+        {destinationClients.map((client) => {
           const rates = destinationRates.filter((r) => r.client === client);
 
           return (

@@ -2,6 +2,7 @@ import { PrismaClient, type EmployeeRole } from "@prisma/client";
 import { calculateDestinationPayout } from "../lib/calculations";
 import { clients, toPrismaCalculationType } from "../lib/clients";
 import { employees, shipments } from "../lib/mockData";
+import { livestockDestinationRates } from "../lib/livestock";
 import { resolveShipmentRate, destinationRates, type DestinationClient } from "../lib/rates";
 import { trucks } from "../lib/trucks";
 import { trimOrNull } from "../lib/mappers/shipmentRemarks";
@@ -49,6 +50,14 @@ async function main() {
       data: {
         name: client.name,
         calcType: toPrismaCalculationType(client.calculationType),
+        pigheadDriverRate:
+          client.calculationType === "Livestock"
+            ? (client.pigheadDriverRate ?? 25)
+            : null,
+        pigheadHelperRate:
+          client.calculationType === "Livestock"
+            ? (client.pigheadHelperRate ?? 25)
+            : null,
       },
     });
     clientIdByName.set(record.name, record.id);
@@ -91,6 +100,22 @@ async function main() {
   console.log("Seeding destination routes…");
   let seededRoutes = 0;
   for (const rate of destinationRates) {
+    const clientId = clientIdByName.get(rate.client);
+    if (!clientId) continue;
+
+    await prisma.destinationRoute.create({
+      data: {
+        clientId,
+        routeName: rate.routeName,
+        distance: rate.distance,
+        driverBaseRate: rate.driverBaseRate,
+        helperBaseRate: rate.helperBaseRate,
+        extraHelperBaseRate: rate.extraHelperBaseRate,
+      },
+    });
+    seededRoutes += 1;
+  }
+  for (const rate of livestockDestinationRates) {
     const clientId = clientIdByName.get(rate.client);
     if (!clientId) continue;
 

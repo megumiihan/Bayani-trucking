@@ -290,7 +290,10 @@ function ShipmentHistoryRow({ entry }: { entry: EmployeeShipmentEntry }) {
         {shipment.clientNumber}
       </td>
       <td className="whitespace-nowrap px-4 py-3 text-gray-700">
-        {shipment.farthestRoute}
+        <p>{shipment.farthestRoute}</p>
+        {shipment.pigheadCount != null && (
+          <p className="text-xs text-gray-500">{shipment.pigheadCount} heads</p>
+        )}
       </td>
       <td className="whitespace-nowrap px-4 py-3">
         <Badge label={role} className={shipmentRoleColors[role]} />

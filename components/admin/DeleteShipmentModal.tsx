@@ -62,6 +62,12 @@ export default function DeleteShipmentModal({
           <PreviewRow label="Waybill" value={shipment.waybillNumber || "—"} />
           <PreviewRow label="Client" value={shipment.client} />
           <PreviewRow label="Route" value={shipment.farthestRoute || "—"} />
+          <PreviewRow
+            label="Pig heads"
+            value={
+              shipment.pigheadCount != null ? String(shipment.pigheadCount) : "—"
+            }
+          />
           <PreviewRow label="Driver" value={shipment.driver} />
           <PreviewRow label="Helper" value={shipment.helper || "—"} />
         </dl>

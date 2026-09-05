@@ -36,5 +36,6 @@ export function mapShipmentLogToShipment(
     driverPayout: record.driverPayout,
     helperPayout: record.helperPayout,
     extraHelperPayout: record.extraHelperPayout,
+    pigheadCount: record.pigheadCount,
   };
 }

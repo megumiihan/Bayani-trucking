@@ -1,7 +1,7 @@
 export type CalculationType =
   | "Destination"
   | "Weight"
-  | "AnimalHeadcount"
+  | "Livestock"
   | "Platform";
 
 /** Prisma `CalculationType` enum values (SCREAMING_SNAKE_CASE). */
@@ -18,7 +18,7 @@ export const CALCULATION_TYPE_TO_PRISMA: Record<
 > = {
   Destination: "DESTINATION",
   Weight: "WEIGHT",
-  AnimalHeadcount: "ANIMAL_HEADCOUNT",
+  Livestock: "ANIMAL_HEADCOUNT",
   Platform: "PLATFORM",
 };
 
@@ -29,7 +29,7 @@ export const PRISMA_TO_CALCULATION_TYPE: Record<
 > = {
   DESTINATION: "Destination",
   WEIGHT: "Weight",
-  ANIMAL_HEADCOUNT: "AnimalHeadcount",
+  ANIMAL_HEADCOUNT: "Livestock",
   PLATFORM: "Platform",
 };
 
@@ -49,6 +49,8 @@ export interface Client {
   id: string;
   name: string;
   calculationType: CalculationType;
+  pigheadDriverRate?: number | null;
+  pigheadHelperRate?: number | null;
 }
 
 export const clients: Client[] = [
@@ -75,7 +77,9 @@ export const clients: Client[] = [
   {
     id: "CLI-CHAROEN-001",
     name: "Charoen",
-    calculationType: "AnimalHeadcount",
+    calculationType: "Livestock",
+    pigheadDriverRate: 25,
+    pigheadHelperRate: 25,
   },
   {
     id: "CLI-MOBERS-001",
@@ -104,11 +108,21 @@ export function isDestinationClient(name: string): name is DestinationClientName
   return client?.calculationType === "Destination";
 }
 
-export function getCalculationTypeLabel(type: CalculationType): string {
+export function isLivestockClient(
+  client: Pick<Client, "calculationType"> | string | null | undefined
+) {
+  if (!client) return false;
+  if (typeof client === "string") {
+    return getClientByName(client)?.calculationType === "Livestock";
+  }
+  return client.calculationType === "Livestock";
+}
+
+export function getCalculationTypeLabel(type: CalculationType) {
   const labels: Record<CalculationType, string> = {
     Destination: "Destination",
     Weight: "Weight",
-    AnimalHeadcount: "Animal Headcount",
+    Livestock: "Livestock",
     Platform: "Platform",
   };
   return labels[type];
