@@ -20,6 +20,7 @@ export interface Employee {
   emergencyContactPhone: string | null;
   tenureStatus: TenureStatus;
   remarks: string;
+  bountyExp?: string;
 }
 
 export interface Shipment {
@@ -41,6 +42,8 @@ export interface Shipment {
   payoutStatus: PayoutStatus;
   flagged: boolean;
   approved: boolean;
+  /** When the log was saved. Used to put the newest entries first. */
+  createdAt?: string;
   uploadedByUserId: string;
   /** Resolved from the Profile table at query time; absent for legacy seeded rows. */
   uploadedByName?: string;
@@ -50,6 +53,7 @@ export interface Shipment {
   extraHelperPayout?: number;
   pigheadCount?: number | null;
   platformRate?: number | null;
+  weightKg?: number | null;
 }
 
 export interface RouteRate {
@@ -449,6 +453,8 @@ export function formatCurrency(amount: number): string {
 
 export function sortShipmentsByDateDesc(shipments: Shipment[]): Shipment[] {
   return [...shipments].sort((a, b) => {
+    const createdCompare = (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
+    if (createdCompare !== 0) return createdCompare;
     const dateCompare = b.date.localeCompare(a.date);
     if (dateCompare !== 0) return dateCompare;
     return b.id.localeCompare(a.id);

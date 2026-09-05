@@ -6,7 +6,7 @@ export async function getShipments() {
     include: {
       client: { select: { name: true } },
     },
-    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    orderBy: [{ createdAt: "desc" }, { date: "desc" }],
   });
 
   const profiles = await prisma.profile.findMany({

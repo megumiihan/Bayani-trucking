@@ -22,5 +22,6 @@ export function mapEmployeeToUi(record: DbEmployee): Employee {
     emergencyContactPhone: null,
     tenureStatus: record.isActive ? "new" : "inactive",
     remarks: record.remarks ?? "",
+    bountyExp: record.bountyExp,
   };
 }

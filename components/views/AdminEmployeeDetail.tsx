@@ -10,7 +10,11 @@ import {
   type Employee,
   type Shipment,
 } from "@/lib/mockData";
-import { updateEmployeeRemarks } from "@/lib/actions/employee";
+import {
+  updateEmployeeBountyExp,
+  updateEmployeeRemarks,
+} from "@/lib/actions/employee";
+import { BOUNTY_EXP_NEW, BOUNTY_EXP_OLD } from "@/lib/weight";
 import { recordSalaryPayment } from "@/lib/actions/payment";
 import type { SalaryPaymentUi } from "@/lib/mappers/salaryPayment";
 import {
@@ -38,6 +42,10 @@ export default function AdminEmployeeDetail({
   const [shipments] = useState(initialShipments);
   const [payments, setPayments] = useState(initialPayments);
   const [remarks, setRemarks] = useState(employee.remarks);
+  const [bountyExp, setBountyExp] = useState(
+    employee.bountyExp ?? BOUNTY_EXP_OLD
+  );
+  const [isSavingBountyExp, setIsSavingBountyExp] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [isSavingRemarks, setIsSavingRemarks] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -160,6 +168,46 @@ export default function AdminEmployeeDetail({
                 label={employee.tenureStatus}
                 className={tenureStatusColors[employee.tenureStatus]}
               />
+              <Badge
+                label={employee.bountyExp ?? BOUNTY_EXP_OLD}
+                className={
+                  (employee.bountyExp ?? BOUNTY_EXP_OLD) === BOUNTY_EXP_NEW
+                    ? "bg-violet-100 text-violet-800"
+                    : "bg-amber-100 text-amber-800"
+                }
+              />
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <select
+                value={bountyExp}
+                onChange={(e) => setBountyExp(e.target.value)}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-900"
+                aria-label="Bounty experience"
+              >
+                <option value={BOUNTY_EXP_OLD}>oldbounty</option>
+                <option value={BOUNTY_EXP_NEW}>newbounty</option>
+              </select>
+              <button
+                type="button"
+                disabled={isSavingBountyExp}
+                onClick={async () => {
+                  setIsSavingBountyExp(true);
+                  setSaveError(null);
+                  const result = await updateEmployeeBountyExp(
+                    employee.id,
+                    bountyExp
+                  );
+                  setIsSavingBountyExp(false);
+                  if (!result.success) {
+                    setSaveError(result.error);
+                    return;
+                  }
+                  setBountyExp(result.employee.bountyExp ?? BOUNTY_EXP_OLD);
+                }}
+                className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+              >
+                {isSavingBountyExp ? "Saving…" : "Save bountyexp"}
+              </button>
             </div>
           </div>
         </div>

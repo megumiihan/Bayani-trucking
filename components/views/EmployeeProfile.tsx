@@ -17,6 +17,7 @@ import {
 } from "@/lib/payout";
 import { useRole } from "@/context/RoleContext";
 import Badge from "@/components/ui/Badge";
+import { BOUNTY_EXP_NEW, BOUNTY_EXP_OLD } from "@/lib/weight";
 import PageHeader from "@/components/ui/PageHeader";
 
 const ALL_MONTHS = "all";
@@ -149,6 +150,15 @@ export default function EmployeeProfile({
                   <Badge
                     label={employeeRecord.tenureStatus}
                     className={tenureStatusColors[employeeRecord.tenureStatus]}
+                  />
+                  <Badge
+                    label={employeeRecord.bountyExp ?? BOUNTY_EXP_OLD}
+                    className={
+                      (employeeRecord.bountyExp ?? BOUNTY_EXP_OLD) ===
+                      BOUNTY_EXP_NEW
+                        ? "bg-violet-100 text-violet-800"
+                        : "bg-amber-100 text-amber-800"
+                    }
                   />
                 </>
               )}
@@ -298,6 +308,9 @@ function ShipmentHistoryRow({ entry }: { entry: EmployeeShipmentEntry }) {
           <p className="text-xs text-gray-500">
             Rate {formatCurrency(shipment.platformRate)}
           </p>
+        )}
+        {shipment.weightKg != null && (
+          <p className="text-xs text-gray-500">{shipment.weightKg} kg</p>
         )}
       </td>
       <td className="whitespace-nowrap px-4 py-3">

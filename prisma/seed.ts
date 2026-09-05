@@ -3,6 +3,7 @@ import { calculateDestinationPayout } from "../lib/calculations";
 import { clients, toPrismaCalculationType } from "../lib/clients";
 import { employees, shipments } from "../lib/mockData";
 import { livestockDestinationRates } from "../lib/livestock";
+import { bountyWeightRates } from "../lib/weight";
 import { resolveShipmentRate, destinationRates, type DestinationClient } from "../lib/rates";
 import { trucks } from "../lib/trucks";
 import { trimOrNull } from "../lib/mappers/shipmentRemarks";
@@ -84,6 +85,7 @@ async function main() {
         role: toPrismaEmployeeRole(employee.role),
         isActive: employee.tenureStatus !== "inactive",
         remarks: trimOrNull(employee.remarks),
+        bountyExp: "oldbounty",
       },
     });
   }
@@ -139,6 +141,25 @@ async function main() {
         driverBaseRate: rate.driverBaseRate,
         helperBaseRate: rate.helperBaseRate,
         extraHelperBaseRate: rate.extraHelperBaseRate,
+      },
+    });
+    seededRoutes += 1;
+  }
+  for (const rate of bountyWeightRates) {
+    const clientId = clientIdByName.get(rate.client);
+    if (!clientId) continue;
+    await prisma.destinationRoute.create({
+      data: {
+        clientId,
+        routeName: rate.routeName,
+        distance: rate.distance,
+        driverBaseRate: rate.driverRate,
+        helperBaseRate: rate.helperRate,
+        extraHelperBaseRate: rate.helperRate,
+        weightKg: rate.weightKg,
+        sameDriverRate: rate.sameDriverRate,
+        newHelperRate: rate.newHelperRate,
+        newDriverRate: rate.newDriverRate,
       },
     });
     seededRoutes += 1;

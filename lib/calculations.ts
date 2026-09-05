@@ -1,5 +1,6 @@
 import { parsePighead } from "./livestock";
 import { parsePlatformRate } from "./platform";
+import { isNewBountyExp } from "./weight";
 import {
   getDestinationRoute,
   getDestinationRouteById,
@@ -140,4 +141,78 @@ export function calculatePlatformPayout({
     helperPayout,
     extraHelperPayout: hasExtraHelper ? helperPayout : 0,
   };
+}
+
+export interface WeightPayoutInput {
+  helperRate: number;
+  driverRate: number;
+  sameDriverRate: number;
+  newHelperRate: number;
+  newDriverRate: number;
+  driverExp: string | null;
+  helperExp: string | null;
+  extraHelperExp?: string | null;
+  driverAsHelper: boolean;
+  samePerson: boolean;
+  hasExtraHelper: boolean;
+}
+
+function weightRoleRate(
+  rates: Pick<
+    WeightPayoutInput,
+    | "helperRate"
+    | "driverRate"
+    | "sameDriverRate"
+    | "newHelperRate"
+    | "newDriverRate"
+  >,
+  role: "driver" | "helper",
+  exp: string | null,
+  driverAsHelper: boolean
+) {
+  const isNew = isNewBountyExp(exp);
+  if (driverAsHelper) {
+    return rates.sameDriverRate;
+  }
+  if (role === "driver") return isNew ? rates.newDriverRate : rates.driverRate;
+  return isNew ? rates.newHelperRate : rates.helperRate;
+}
+
+/**
+ * Weight-based payouts (Bounty): route + kg tier, then old/new bounty
+ * experience. Same-driver rate wins whenever the helper is a driver.
+ */
+export function calculateWeightPayout({
+  helperRate,
+  driverRate,
+  sameDriverRate,
+  newHelperRate,
+  newDriverRate,
+  driverExp,
+  helperExp,
+  extraHelperExp,
+  driverAsHelper,
+  samePerson,
+  hasExtraHelper,
+}: WeightPayoutInput): DestinationPayoutResult | null {
+  const rates = {
+    helperRate,
+    driverRate,
+    sameDriverRate,
+    newHelperRate,
+    newDriverRate,
+  };
+  const values = Object.values(rates);
+  if (values.some((value) => !Number.isFinite(value) || value < 0)) return null;
+
+  const driverPayout = weightRoleRate(rates, "driver", driverExp, driverAsHelper);
+  const helperPayout =
+    driverAsHelper && samePerson
+      ? 0
+      : weightRoleRate(rates, "helper", helperExp, driverAsHelper);
+  const extraHelperPayout = hasExtraHelper
+    ? weightRoleRate(rates, "helper", extraHelperExp ?? null, false)
+    : 0;
+
+  return { driverPayout, helperPayout, extraHelperPayout };
 }

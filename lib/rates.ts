@@ -17,6 +17,10 @@ export interface DestinationRouteRate {
   driverBaseRate: number;
   helperBaseRate: number;
   extraHelperBaseRate: number;
+  weightKg?: number | null;
+  sameDriverRate?: number | null;
+  newDriverRate?: number | null;
+  newHelperRate?: number | null;
   description?: string;
 }
 

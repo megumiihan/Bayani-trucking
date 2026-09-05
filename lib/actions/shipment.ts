@@ -7,10 +7,12 @@ import {
   calculateDestinationPayout,
   calculateLivestockPayout,
   calculatePlatformPayout,
+  calculateWeightPayout,
 } from "@/lib/calculations";
 import { LIVESTOCK_MAX_HEADS, parsePighead } from "@/lib/livestock";
 import { isDestinationClient } from "@/lib/clients";
 import { parsePlatformRate } from "@/lib/platform";
+import { parseWeightKg } from "@/lib/weight";
 import { mapShipmentLogToShipment } from "@/lib/mappers/shipmentLog";
 import { trimOrNull } from "@/lib/mappers/shipmentRemarks";
 import { prisma } from "@/lib/prisma";
@@ -104,6 +106,8 @@ type ResolvedPayout =
       distance: string | null;
       pigheadCount: number | null;
       platformRate: number | null;
+      weightKg: number | null;
+      isDriverAsHelper: boolean;
     }
   | { ok: false; error: string };
 
@@ -122,6 +126,10 @@ async function resolvePayout(input: {
   hasExtraHelper: boolean;
   pigheadCount?: number | null;
   platformRate?: number | null;
+  weightKg?: number | null;
+  driver?: string;
+  helper?: string | null;
+  extraHelper?: string | null;
 }): Promise<ResolvedPayout> {
   if (input.client.calcType === "ANIMAL_HEADCOUNT") {
     const pigheadCount = parsePighead(input.pigheadCount);
@@ -168,6 +176,88 @@ async function resolvePayout(input: {
       distance: route.distance || null,
       pigheadCount,
       platformRate: null,
+      weightKg: null,
+      isDriverAsHelper: false,
+    };
+  }
+
+  if (input.client.calcType === "WEIGHT") {
+    const weightKg = parseWeightKg(input.weightKg);
+    if (weightKg == null) {
+      return {
+        ok: false,
+        error: "Select a weight tier (2000, 3000, or 4000 kg).",
+      };
+    }
+
+    const route = await prisma.destinationRoute.findFirst({
+      where: {
+        clientId: input.client.id,
+        routeName: input.farthestRoute,
+        weightKg,
+      },
+    });
+
+    if (!route) {
+      return {
+        ok: false,
+        error: `No weight rate found for "${input.farthestRoute}" at ${weightKg} kg.`,
+      };
+    }
+
+    const [driver, helper, extraHelper] = await Promise.all([
+      input.driver
+        ? prisma.employee.findFirst({
+            where: { fullName: input.driver },
+            select: { id: true, role: true, bountyExp: true },
+          })
+        : Promise.resolve(null),
+      input.helper
+        ? prisma.employee.findFirst({
+            where: { fullName: input.helper },
+            select: { id: true, role: true, bountyExp: true },
+          })
+        : Promise.resolve(null),
+      input.extraHelper
+        ? prisma.employee.findFirst({
+            where: { fullName: input.extraHelper },
+            select: { bountyExp: true },
+          })
+        : Promise.resolve(null),
+    ]);
+
+    const driverAsHelper =
+      helper != null && (helper.role === "DRIVER" || helper.role === "BOTH");
+
+    const payout = calculateWeightPayout({
+      helperRate: route.helperBaseRate,
+      driverRate: route.driverBaseRate,
+      sameDriverRate: route.sameDriverRate ?? NaN,
+      newHelperRate: route.newHelperRate ?? NaN,
+      newDriverRate: route.newDriverRate ?? NaN,
+      driverExp: driver?.bountyExp ?? null,
+      helperExp: helper?.bountyExp ?? null,
+      extraHelperExp: extraHelper?.bountyExp ?? null,
+      driverAsHelper,
+      samePerson: Boolean(driver && helper && driver.id === helper.id),
+      hasExtraHelper: input.hasExtraHelper,
+    });
+
+    if (!payout) {
+      return {
+        ok: false,
+        error: `Could not calculate weight payouts for ${input.client.name}.`,
+      };
+    }
+
+    return {
+      ok: true,
+      payout,
+      distance: route.distance || null,
+      pigheadCount: null,
+      platformRate: null,
+      weightKg,
+      isDriverAsHelper: driverAsHelper,
     };
   }
 
@@ -201,6 +291,8 @@ async function resolvePayout(input: {
       distance: null,
       pigheadCount: null,
       platformRate,
+      weightKg: null,
+      isDriverAsHelper: false,
     };
   }
 
@@ -229,6 +321,8 @@ async function resolvePayout(input: {
       distance: selectedRoute?.distance || null,
       pigheadCount: null,
       platformRate: null,
+      weightKg: null,
+      isDriverAsHelper: false,
     };
   }
 
@@ -271,6 +365,10 @@ export async function saveShipment(
       hasExtraHelper: input.hasExtraHelper,
       pigheadCount: input.pigheadCount,
       platformRate: input.platformRate,
+      weightKg: input.weightKg,
+      driver: input.driver,
+      helper: input.helper,
+      extraHelper: input.extraHelper,
     });
     if (!resolved.ok) {
       return { success: false, error: resolved.error };
@@ -292,7 +390,8 @@ export async function saveShipment(
         waybillNumber: input.waybillNumber || null,
         routeName: input.farthestRoute,
         distance: resolved.distance,
-        weightKg: input.weightKg ?? null,
+        weightKg: resolved.weightKg,
+        isDriverAsHelper: resolved.isDriverAsHelper,
         headCount: input.headCount ?? null,
         pigheadCount: resolved.pigheadCount,
         platformRate: resolved.platformRate,
@@ -305,7 +404,6 @@ export async function saveShipment(
         extraHelperNote: input.hasExtraHelper
           ? trimOrNull(input.extraHelperNote)
           : null,
-        isDriverAsHelper: false,
         driverPayout: resolved.payout.driverPayout,
         helperPayout: resolved.payout.helperPayout,
         extraHelperPayout: resolved.payout.extraHelperPayout,
@@ -397,6 +495,7 @@ export interface UpdateShipmentInput {
   approved: boolean;
   pigheadCount?: number | null;
   platformRate?: number | null;
+  weightKg?: number | null;
 }
 
 export type UpdateShipmentResult =
@@ -453,12 +552,17 @@ export async function updateShipment(
       hasExtraHelper,
       pigheadCount: input.pigheadCount,
       platformRate: input.platformRate,
+      weightKg: input.weightKg,
+      driver: input.driver,
+      helper: input.helper,
+      extraHelper: input.extraHelper,
     });
     if (!resolved.ok) {
       return { success: false, error: resolved.error };
     }
 
-    const { payout, distance, pigheadCount, platformRate } = resolved;
+    const { payout, distance, pigheadCount, platformRate, weightKg, isDriverAsHelper } =
+      resolved;
     const driverPayout = payout.driverPayout;
     const helperPayout = payout.helperPayout;
     const extraHelperPayout = payout.extraHelperPayout;
@@ -480,6 +584,8 @@ export async function updateShipment(
         waybillNumber: input.waybillNumber || null,
         routeName: input.farthestRoute,
         distance,
+        weightKg,
+        isDriverAsHelper,
         pigheadCount,
         platformRate,
         driverName: input.driver,

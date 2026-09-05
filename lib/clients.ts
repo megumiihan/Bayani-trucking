@@ -124,6 +124,16 @@ export function isLivestockClient(
   return client.calculationType === "Livestock";
 }
 
+export function isWeightClient(
+  client: Pick<Client, "calculationType"> | string | null | undefined
+) {
+  if (!client) return false;
+  if (typeof client === "string") {
+    return getClientByName(client)?.calculationType === "Weight";
+  }
+  return client.calculationType === "Weight";
+}
+
 export function isPlatformClient(
   client: Pick<Client, "calculationType"> | string | null | undefined
 ) {

@@ -2,9 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Employee, Shipment } from "@/lib/mockData";
-import { isLivestockClient, isPlatformClient, type Client } from "@/lib/clients";
+import {
+  isLivestockClient,
+  isPlatformClient,
+  isWeightClient,
+  type Client,
+} from "@/lib/clients";
 import { LIVESTOCK_MAX_HEADS } from "@/lib/livestock";
 import type { DestinationRouteRate } from "@/lib/rates";
+import { uniqueWeightRouteNames, weightTiersForRoute } from "@/lib/weight";
 import { formatTruckLabel, type Truck } from "@/lib/trucks";
 import {
   getUniqueRouteNamesForClient,
@@ -45,6 +51,7 @@ type EditForm = {
   approved: boolean;
   pigheadCount: string;
   platformRate: string;
+  weightKg: string;
 };
 
 function toForm(shipment: Shipment): EditForm {
@@ -67,6 +74,7 @@ function toForm(shipment: Shipment): EditForm {
     approved: shipment.approved,
     pigheadCount: shipment.pigheadCount != null ? String(shipment.pigheadCount) : "",
     platformRate: shipment.platformRate != null ? String(shipment.platformRate) : "",
+    weightKg: shipment.weightKg != null ? String(shipment.weightKg) : "",
   };
 }
 
@@ -122,6 +130,15 @@ export default function EditShipmentModal({
   const usesDestinationRates = selectedClient?.calculationType === "Destination";
   const usesLivestockRates = isLivestockClient(selectedClient);
   const usesPlatformRates = isPlatformClient(selectedClient);
+  const usesWeightRates = isWeightClient(selectedClient);
+  const clientWeightRoutes = routes.filter(
+    (route) => route.client === form.client && route.weightKg != null
+  );
+  const weightRouteNames = uniqueWeightRouteNames(clientWeightRoutes);
+  const weightKgOptions = weightTiersForRoute(
+    clientWeightRoutes,
+    form.farthestRoute
+  );
   const livestockRoutes = routes.filter((route) => route.client === form.client);
   const routeOptions = usesDestinationRates
     ? getUniqueRouteNamesForClient(form.client as DestinationClient)
@@ -153,6 +170,7 @@ export default function EditShipmentModal({
             farthestRoute: "",
             pigheadCount: "",
             platformRate: "",
+            weightKg: "",
           }
         : current
     );
@@ -183,6 +201,7 @@ export default function EditShipmentModal({
       approved: form.approved,
       pigheadCount: usesLivestockRates ? Number(form.pigheadCount) : null,
       platformRate: usesPlatformRates ? Number(form.platformRate) : null,
+      weightKg: usesWeightRates ? Number(form.weightKg) : null,
     });
 
     setIsSaving(false);
@@ -203,8 +222,9 @@ export default function EditShipmentModal({
     drivers,
     employees.find((employee) => employee.name === form.driver)
   );
+  const helperPool = usesWeightRates ? [...helpers, ...drivers] : helpers;
   const helperOptions = includeCurrent(
-    helpers,
+    helperPool,
     employees.find((employee) => employee.name === form.helper)
   );
 
@@ -288,11 +308,32 @@ export default function EditShipmentModal({
               </Field>
 
               <Field
-                label={usesPlatformRates ? "Destination" : "Farthest Route"}
+                label={
+                  usesPlatformRates || usesWeightRates
+                    ? "Destination"
+                    : "Farthest Route"
+                }
                 required
                 className="sm:col-span-2"
               >
-                {usesPlatformRates ? (
+                {usesWeightRates ? (
+                  <select
+                    required
+                    value={form.farthestRoute}
+                    onChange={(e) => {
+                      updateField("farthestRoute", e.target.value);
+                      updateField("weightKg", "");
+                    }}
+                    className={inputClass}
+                  >
+                    <option value="">Select destination</option>
+                    {weightRouteNames.map((routeName) => (
+                      <option key={routeName} value={routeName}>
+                        {routeName}
+                      </option>
+                    ))}
+                  </select>
+                ) : usesPlatformRates ? (
                   <input
                     type="text"
                     required
@@ -341,6 +382,29 @@ export default function EditShipmentModal({
                   />
                 )}
               </Field>
+
+              {usesWeightRates && (
+                <Field label="KG" required>
+                  <select
+                    required
+                    value={form.weightKg}
+                    onChange={(e) => updateField("weightKg", e.target.value)}
+                    className={inputClass}
+                    disabled={!form.farthestRoute}
+                  >
+                    <option value="">
+                      {form.farthestRoute
+                        ? "Select weight tier"
+                        : "Select a destination first"}
+                    </option>
+                    {weightKgOptions.map((kg) => (
+                      <option key={kg} value={kg}>
+                        {kg}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
 
               {usesPlatformRates && (
                 <Field label="Platform rate" required>
@@ -400,7 +464,9 @@ export default function EditShipmentModal({
                   <option value="">Select helper</option>
                   {helperOptions.map((helper) => (
                     <option key={helper.id} value={helper.name}>
-                      {helper.name}
+                      {usesWeightRates && helper.role === "Driver"
+                        ? `${helper.name} (driver)`
+                        : helper.name}
                     </option>
                   ))}
                 </select>

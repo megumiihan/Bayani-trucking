@@ -21,6 +21,8 @@ model Employee {
   role      EmployeeRole // DRIVER, HELPER, BOTH
   isActive  Boolean      @default(true) // Set to false if they resign
   remarks   String?
+  /// Bounty experience tag, e.g. oldbounty / newbounty.
+  bountyExp String       @default("oldbounty")
   createdAt DateTime     @default(now())
 
   // Optional: Allows querying all shipments completed by this employee
@@ -112,9 +114,13 @@ model DestinationRoute {
   driverBaseRate      Float
   helperBaseRate      Float
   extraHelperBaseRate Float
+  weightKg            Int?
+  sameDriverRate      Float?
+  newDriverRate       Float?
+  newHelperRate       Float?
   createdAt           DateTime @default(now())
 
-  @@unique([clientId, routeName, distance])
+  @@unique([clientId, routeName, distance, weightKg])
 }
 
 // 5. SHIPMENT LOGS (Transactional Event)

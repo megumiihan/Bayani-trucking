@@ -74,6 +74,10 @@ export default function DeleteShipmentModal({
               shipment.platformRate != null ? String(shipment.platformRate) : "—"
             }
           />
+          <PreviewRow
+            label="KG"
+            value={shipment.weightKg != null ? String(shipment.weightKg) : "—"}
+          />
           <PreviewRow label="Driver" value={shipment.driver} />
           <PreviewRow label="Helper" value={shipment.helper || "—"} />
         </dl>

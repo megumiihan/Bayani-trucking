@@ -10,8 +10,12 @@ import {
   type Shipment,
 } from "@/lib/mockData";
 import { getEmployeeStats } from "@/lib/payout";
-import { updateEmployeeRemarks } from "@/lib/actions/employee";
+import {
+  updateEmployeeBountyExp,
+  updateEmployeeRemarks,
+} from "@/lib/actions/employee";
 import Badge from "@/components/ui/Badge";
+import { BOUNTY_EXP_NEW, BOUNTY_EXP_OLD } from "@/lib/weight";
 import PageHeader from "@/components/ui/PageHeader";
 
 interface AdminEmployeesOverviewProps {
@@ -78,6 +82,17 @@ export default function AdminEmployeesOverview({
               onSaveRemarks={(remarks) =>
                 handleSaveEmployeeRemarks(employee.id, remarks)
               }
+              onToggleBountyExp={async (next) => {
+                const result = await updateEmployeeBountyExp(employee.id, next);
+                if (result.success) {
+                  setEmployees((current) =>
+                    current.map((entry) =>
+                      entry.id === employee.id ? result.employee : entry
+                    )
+                  );
+                }
+                return result;
+              }}
             />
           );
         })}
@@ -89,22 +104,29 @@ export default function AdminEmployeesOverview({
 type UpdateEmployeeRemarksResult = Awaited<
   ReturnType<typeof updateEmployeeRemarks>
 >;
+type UpdateBountyExpResult = Awaited<
+  ReturnType<typeof updateEmployeeBountyExp>
+>;
 
 function EmployeeCard({
   employee,
   shipmentCount,
   totalPayout,
   onSaveRemarks,
+  onToggleBountyExp,
 }: {
   employee: Employee;
   shipmentCount: number;
   totalPayout: number;
   onSaveRemarks: (remarks: string) => Promise<UpdateEmployeeRemarksResult>;
+  onToggleBountyExp: (next: string) => Promise<UpdateBountyExpResult>;
 }) {
   const [remarks, setRemarks] = useState(employee.remarks);
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingBountyExp, setIsSavingBountyExp] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const bountyExp = employee.bountyExp ?? BOUNTY_EXP_OLD;
 
   useEffect(() => {
     setRemarks(employee.remarks);
@@ -144,6 +166,29 @@ function EmployeeCard({
               label={employee.tenureStatus}
               className={tenureStatusColors[employee.tenureStatus]}
             />
+            <button
+              type="button"
+              disabled={isSavingBountyExp}
+              title="Click to switch oldbounty / newbounty"
+              onClick={async () => {
+                const next =
+                  bountyExp === BOUNTY_EXP_NEW
+                    ? BOUNTY_EXP_OLD
+                    : BOUNTY_EXP_NEW;
+                setIsSavingBountyExp(true);
+                setSaveError(null);
+                const result = await onToggleBountyExp(next);
+                setIsSavingBountyExp(false);
+                if (!result.success) setSaveError(result.error);
+              }}
+              className={`rounded-full px-2 py-0.5 text-xs font-medium disabled:opacity-60 ${
+                bountyExp === BOUNTY_EXP_NEW
+                  ? "bg-violet-100 text-violet-800 hover:bg-violet-200"
+                  : "bg-amber-100 text-amber-800 hover:bg-amber-200"
+              }`}
+            >
+              {isSavingBountyExp ? "Saving…" : bountyExp}
+            </button>
           </div>
         </div>
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-bold text-gray-600">

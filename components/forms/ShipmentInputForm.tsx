@@ -8,6 +8,7 @@ import {
   getCalculationTypeLabel,
   isLivestockClient,
   isPlatformClient,
+  isWeightClient,
   type Client,
 } from "@/lib/clients";
 import { LIVESTOCK_MAX_HEADS } from "@/lib/livestock";
@@ -21,8 +22,10 @@ import {
   calculateDestinationPayout,
   calculateLivestockPayout,
   calculatePlatformPayout,
+  calculateWeightPayout,
 } from "@/lib/calculations";
 import { fractionToPercentInput } from "@/lib/platform";
+import { uniqueWeightRouteNames, weightTiersForRoute } from "@/lib/weight";
 import { saveShipment } from "@/lib/actions/shipment";
 import { useRole } from "@/context/RoleContext";
 import PageHeader from "@/components/ui/PageHeader";
@@ -67,6 +70,7 @@ export default function ShipmentInputForm({
     remarks: "",
     pigheadCount: "",
     platformRate: "",
+    weightKg: "",
   };
 
   const [form, setForm] = useState(initialForm);
@@ -99,6 +103,26 @@ export default function ShipmentInputForm({
   const usesDestinationRates = selectedClient?.calculationType === "Destination";
   const usesLivestockRates = isLivestockClient(selectedClient);
   const usesPlatformRates = isPlatformClient(selectedClient);
+  const usesWeightRates = isWeightClient(selectedClient);
+  const clientWeightRoutes = routes.filter(
+    (route) => route.client === form.client && route.weightKg != null
+  );
+  const weightRouteNames = uniqueWeightRouteNames(clientWeightRoutes);
+  const weightKgOptions = weightTiersForRoute(
+    clientWeightRoutes,
+    form.farthestRoute
+  );
+  const selectedWeightRoute = clientWeightRoutes.find(
+    (route) =>
+      route.routeName === form.farthestRoute &&
+      String(route.weightKg) === form.weightKg
+  );
+  const selectedDriver = employees.find((employee) => employee.name === form.driver);
+  const selectedHelper = employees.find((employee) => employee.name === form.helper);
+  const selectedExtraHelper = employees.find(
+    (employee) => employee.name === form.extraHelper
+  );
+  const driverAsHelper = selectedHelper?.role === "Driver";
   const livestockRoutes = routes.filter(
     (route) => route.client === form.client
   );
@@ -136,6 +160,23 @@ export default function ShipmentInputForm({
         hasExtraHelper: form.hasExtraHelper,
       });
     }
+    if (usesWeightRates && selectedWeightRoute) {
+      return calculateWeightPayout({
+        helperRate: selectedWeightRoute.helperBaseRate,
+        driverRate: selectedWeightRoute.driverBaseRate,
+        sameDriverRate: selectedWeightRoute.sameDriverRate ?? NaN,
+        newHelperRate: selectedWeightRoute.newHelperRate ?? NaN,
+        newDriverRate: selectedWeightRoute.newDriverRate ?? NaN,
+        driverExp: selectedDriver?.bountyExp ?? null,
+        helperExp: selectedHelper?.bountyExp ?? null,
+        extraHelperExp: selectedExtraHelper?.bountyExp ?? null,
+        driverAsHelper,
+        samePerson: Boolean(
+          selectedDriver && selectedHelper && selectedDriver.id === selectedHelper.id
+        ),
+        hasExtraHelper: form.hasExtraHelper,
+      });
+    }
     if (
       usesPlatformRates &&
       selectedClient?.platformShare != null &&
@@ -167,6 +208,7 @@ export default function ShipmentInputForm({
     form.hasExtraHelper,
     form.pigheadCount,
     form.platformRate,
+    form.weightKg,
     helperBase,
     helperHeadRate,
     selectedClient,
@@ -174,6 +216,12 @@ export default function ShipmentInputForm({
     usesDestinationRates,
     usesLivestockRates,
     usesPlatformRates,
+    usesWeightRates,
+    selectedWeightRoute,
+    selectedDriver,
+    selectedHelper,
+    selectedExtraHelper,
+    driverAsHelper,
   ]);
 
   const updateField = <K extends keyof typeof form>(
@@ -205,6 +253,7 @@ export default function ShipmentInputForm({
       farthestRoute: "",
       pigheadCount: "",
       platformRate: "",
+      weightKg: "",
     }));
   };
 
@@ -233,6 +282,7 @@ export default function ShipmentInputForm({
       remarks: form.remarks,
       pigheadCount: usesLivestockRates ? Number(form.pigheadCount) : null,
       platformRate: usesPlatformRates ? Number(form.platformRate) : null,
+      weightKg: usesWeightRates ? Number(form.weightKg) : null,
     });
 
     setIsSubmitting(false);
@@ -382,11 +432,32 @@ export default function ShipmentInputForm({
               </Field>
 
               <Field
-                label={usesPlatformRates ? "Destination" : "Farthest Route"}
+                label={
+                  usesPlatformRates || usesWeightRates
+                    ? "Destination"
+                    : "Farthest Route"
+                }
                 required
                 className="sm:col-span-2"
               >
-                {usesPlatformRates ? (
+                {usesWeightRates ? (
+                  <select
+                    required
+                    value={form.farthestRoute}
+                    onChange={(e) => {
+                      updateField("farthestRoute", e.target.value);
+                      updateField("weightKg", "");
+                    }}
+                    className={inputClass}
+                  >
+                    <option value="">Select destination</option>
+                    {weightRouteNames.map((routeName) => (
+                      <option key={routeName} value={routeName}>
+                        {routeName}
+                      </option>
+                    ))}
+                  </select>
+                ) : usesPlatformRates ? (
                   <input
                     type="text"
                     required
@@ -428,6 +499,29 @@ export default function ShipmentInputForm({
                   />
                 )}
               </Field>
+
+              {usesWeightRates && (
+                <Field label="KG" required>
+                  <select
+                    required
+                    value={form.weightKg}
+                    onChange={(e) => updateField("weightKg", e.target.value)}
+                    className={inputClass}
+                    disabled={!form.farthestRoute}
+                  >
+                    <option value="">
+                      {form.farthestRoute
+                        ? "Select weight tier"
+                        : "Select a destination first"}
+                    </option>
+                    {weightKgOptions.map((kg) => (
+                      <option key={kg} value={kg}>
+                        {kg}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
 
               {usesPlatformRates && (
                 <Field label="Platform rate" required>
@@ -502,12 +596,21 @@ export default function ShipmentInputForm({
                   className={inputClass}
                 >
                   <option value="">Select helper</option>
-                  {helpers.map((helper) => (
-                    <option key={helper.id} value={helper.name}>
-                      {helper.name}
-                    </option>
-                  ))}
+                  {(usesWeightRates ? [...helpers, ...drivers] : helpers).map(
+                    (helper) => (
+                      <option key={helper.id} value={helper.name}>
+                        {usesWeightRates && helper.role === "Driver"
+                          ? `${helper.name} (driver)`
+                          : helper.name}
+                      </option>
+                    )
+                  )}
                 </select>
+                {usesWeightRates && driverAsHelper && (
+                  <span className="mt-1 block text-xs text-amber-700">
+                    This helper is a driver. Payout uses the same-driver rate.
+                  </span>
+                )}
               </Field>
             </div>
 
@@ -615,13 +718,15 @@ export default function ShipmentInputForm({
             <p className="mt-1 text-xs text-blue-600">
               {usesLivestockRates
                 ? `${form.client} livestock · base + heads × per-head rate`
-                : usesPlatformRates
-                  ? `${form.client} platform · rate after share × crew percent`
-                  : usesDestinationRates
-                    ? `${form.client} destination-based rates`
-                    : selectedClient
-                      ? `${getCalculationTypeLabel(selectedClient.calculationType)} calculation — preview coming soon`
-                      : "Select a client to preview payouts"}
+                : usesWeightRates
+                  ? `${form.client} weight · destination + kg${driverAsHelper ? " · driver as helper" : ""}`
+                  : usesPlatformRates
+                    ? `${form.client} platform · rate after share × crew percent`
+                    : usesDestinationRates
+                      ? `${form.client} destination-based rates`
+                      : selectedClient
+                        ? `${getCalculationTypeLabel(selectedClient.calculationType)} calculation — preview coming soon`
+                        : "Select a client to preview payouts"}
             </p>
 
             {payoutPreview ? (
@@ -636,9 +741,11 @@ export default function ShipmentInputForm({
                   <p className="text-xs text-gray-500">
                     {usesLivestockRates
                       ? `₱${driverBase} + ${form.pigheadCount || 0} × ₱${driverHeadRate ?? 0} driver · ₱${helperBase} + ${form.pigheadCount || 0} × ₱${helperHeadRate ?? 0} helper`
-                      : usesPlatformRates
-                        ? `₱${form.platformRate || 0} − ${fractionToPercentInput(selectedClient?.platformShare)}% share · driver ${fractionToPercentInput(selectedClient?.platformDriverRate)}% · helper ${fractionToPercentInput(selectedClient?.platformHelperRate)}%`
-                        : "Estimated rates — final payout may vary once distance is confirmed by operations"}
+                      : usesWeightRates
+                        ? `${form.weightKg || "—"} kg${driverAsHelper ? " · same-driver rate" : ""}`
+                        : usesPlatformRates
+                          ? `₱${form.platformRate || 0} − ${fractionToPercentInput(selectedClient?.platformShare)}% share · driver ${fractionToPercentInput(selectedClient?.platformDriverRate)}% · helper ${fractionToPercentInput(selectedClient?.platformHelperRate)}%`
+                          : "Estimated rates — final payout may vary once distance is confirmed by operations"}
                   </p>
                 </div>
 
@@ -678,11 +785,13 @@ export default function ShipmentInputForm({
               <p className="mt-5 text-sm text-blue-700">
                 {usesLivestockRates
                   ? "Select a farthest route and number of heads to preview livestock payouts."
-                  : usesPlatformRates
-                    ? "Enter a destination and platform rate to preview crew payouts."
-                    : usesDestinationRates
-                      ? "Select a client and farthest route to preview destination-based payouts."
-                      : "Payout preview for this client type will be available once its calculation logic is added."}
+                  : usesWeightRates
+                    ? "Select a destination and kg tier to preview weight-based payouts."
+                    : usesPlatformRates
+                      ? "Enter a destination and platform rate to preview crew payouts."
+                      : usesDestinationRates
+                        ? "Select a client and farthest route to preview destination-based payouts."
+                        : "Payout preview for this client type will be available once its calculation logic is added."}
               </p>
             )}
           </div>

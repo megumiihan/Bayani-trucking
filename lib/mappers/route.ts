@@ -17,6 +17,10 @@ export function mapDestinationRouteToUi(
     driverBaseRate: record.driverBaseRate,
     helperBaseRate: record.helperBaseRate,
     extraHelperBaseRate: record.extraHelperBaseRate,
+    weightKg: record.weightKg,
+    sameDriverRate: record.sameDriverRate,
+    newDriverRate: record.newDriverRate,
+    newHelperRate: record.newHelperRate,
   };
 
   return { ...rate, description: formatRouteDescription(rate) };

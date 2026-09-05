@@ -31,6 +31,7 @@ export function mapShipmentLogToShipment(
     payoutStatus: "Pending",
     flagged: record.isFlagged,
     approved: record.isApproved,
+    createdAt: record.createdAt.toISOString(),
     uploadedByUserId: record.createdById,
     uploadedByName,
     driverPayout: record.driverPayout,
@@ -38,5 +39,6 @@ export function mapShipmentLogToShipment(
     extraHelperPayout: record.extraHelperPayout,
     pigheadCount: record.pigheadCount,
     platformRate: record.platformRate,
+    weightKg: record.weightKg,
   };
 }

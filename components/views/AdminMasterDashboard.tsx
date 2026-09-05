@@ -375,6 +375,9 @@ function MasterTableRow({
             Rate {formatCurrency(shipment.platformRate)}
           </p>
         )}
+        {shipment.weightKg != null && (
+          <p className="text-xs text-gray-500">{shipment.weightKg} kg</p>
+        )}
       </td>
       <td className="border-r border-gray-100 px-3 py-3">
         <p className="font-medium text-gray-900">{shipment.driver}</p>
