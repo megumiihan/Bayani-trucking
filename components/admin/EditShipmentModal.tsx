@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Employee, Shipment } from "@/lib/mockData";
-import { isLivestockClient, type Client } from "@/lib/clients";
+import { isLivestockClient, isPlatformClient, type Client } from "@/lib/clients";
 import { LIVESTOCK_MAX_HEADS } from "@/lib/livestock";
 import type { DestinationRouteRate } from "@/lib/rates";
 import { formatTruckLabel, type Truck } from "@/lib/trucks";
@@ -44,6 +44,7 @@ type EditForm = {
   flagged: boolean;
   approved: boolean;
   pigheadCount: string;
+  platformRate: string;
 };
 
 function toForm(shipment: Shipment): EditForm {
@@ -65,6 +66,7 @@ function toForm(shipment: Shipment): EditForm {
     flagged: shipment.flagged,
     approved: shipment.approved,
     pigheadCount: shipment.pigheadCount != null ? String(shipment.pigheadCount) : "",
+    platformRate: shipment.platformRate != null ? String(shipment.platformRate) : "",
   };
 }
 
@@ -119,6 +121,7 @@ export default function EditShipmentModal({
   const selectedClient = clients.find((client) => client.name === form.client);
   const usesDestinationRates = selectedClient?.calculationType === "Destination";
   const usesLivestockRates = isLivestockClient(selectedClient);
+  const usesPlatformRates = isPlatformClient(selectedClient);
   const livestockRoutes = routes.filter((route) => route.client === form.client);
   const routeOptions = usesDestinationRates
     ? getUniqueRouteNamesForClient(form.client as DestinationClient)
@@ -149,6 +152,7 @@ export default function EditShipmentModal({
             clientNumber: client.id,
             farthestRoute: "",
             pigheadCount: "",
+            platformRate: "",
           }
         : current
     );
@@ -178,6 +182,7 @@ export default function EditShipmentModal({
       flagged: form.flagged,
       approved: form.approved,
       pigheadCount: usesLivestockRates ? Number(form.pigheadCount) : null,
+      platformRate: usesPlatformRates ? Number(form.platformRate) : null,
     });
 
     setIsSaving(false);
@@ -282,8 +287,23 @@ export default function EditShipmentModal({
                 />
               </Field>
 
-              <Field label="Farthest Route" required className="sm:col-span-2">
-                {usesDestinationRates ? (
+              <Field
+                label={usesPlatformRates ? "Destination" : "Farthest Route"}
+                required
+                className="sm:col-span-2"
+              >
+                {usesPlatformRates ? (
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. BGC, Taguig"
+                    value={form.farthestRoute}
+                    onChange={(e) =>
+                      updateField("farthestRoute", e.target.value)
+                    }
+                    className={inputClass}
+                  />
+                ) : usesDestinationRates ? (
                   <SearchableSelect
                     options={routeOptions}
                     value={form.farthestRoute}
@@ -321,6 +341,22 @@ export default function EditShipmentModal({
                   />
                 )}
               </Field>
+
+              {usesPlatformRates && (
+                <Field label="Platform rate" required>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0.01}
+                    step="0.01"
+                    required
+                    value={form.platformRate}
+                    onChange={(e) => updateField("platformRate", e.target.value)}
+                    placeholder="e.g. 10000"
+                    className={inputClass}
+                  />
+                </Field>
+              )}
 
               {usesLivestockRates && (
                 <Field label="Number of heads" required>

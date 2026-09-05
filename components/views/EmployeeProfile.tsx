@@ -294,6 +294,11 @@ function ShipmentHistoryRow({ entry }: { entry: EmployeeShipmentEntry }) {
         {shipment.pigheadCount != null && (
           <p className="text-xs text-gray-500">{shipment.pigheadCount} heads</p>
         )}
+        {shipment.platformRate != null && (
+          <p className="text-xs text-gray-500">
+            Rate {formatCurrency(shipment.platformRate)}
+          </p>
+        )}
       </td>
       <td className="whitespace-nowrap px-4 py-3">
         <Badge label={role} className={shipmentRoleColors[role]} />

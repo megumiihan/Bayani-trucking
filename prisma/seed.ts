@@ -58,6 +58,18 @@ async function main() {
           client.calculationType === "Livestock"
             ? (client.pigheadHelperRate ?? 25)
             : null,
+        platformShare:
+          client.calculationType === "Platform"
+            ? (client.platformShare ?? 0.2)
+            : null,
+        platformDriverRate:
+          client.calculationType === "Platform"
+            ? (client.platformDriverRate ?? 0.17)
+            : null,
+        platformHelperRate:
+          client.calculationType === "Platform"
+            ? (client.platformHelperRate ?? 0.12)
+            : null,
       },
     });
     clientIdByName.set(record.name, record.id);

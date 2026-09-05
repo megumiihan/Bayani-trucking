@@ -68,6 +68,12 @@ export default function DeleteShipmentModal({
               shipment.pigheadCount != null ? String(shipment.pigheadCount) : "—"
             }
           />
+          <PreviewRow
+            label="Platform rate"
+            value={
+              shipment.platformRate != null ? String(shipment.platformRate) : "—"
+            }
+          />
           <PreviewRow label="Driver" value={shipment.driver} />
           <PreviewRow label="Helper" value={shipment.helper || "—"} />
         </dl>

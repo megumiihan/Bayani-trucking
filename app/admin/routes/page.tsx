@@ -1,8 +1,9 @@
 import { getClients } from "@/lib/queries/clients";
 import { getDestinationRoutes } from "@/lib/queries/routes";
-import { isLivestockClient } from "@/lib/clients";
+import { isLivestockClient, isPlatformClient } from "@/lib/clients";
 import { formatCurrency } from "@/lib/mockData";
 import LivestockRatesPanel from "@/components/admin/LivestockRatesPanel";
+import PlatformRatesPanel from "@/components/admin/PlatformRatesPanel";
 import PageHeader from "@/components/ui/PageHeader";
 
 export const dynamic = "force-dynamic";
@@ -18,16 +19,20 @@ export default async function RoutesPage() {
   const livestockClients = allClients.filter((client) =>
     isLivestockClient(client)
   );
+  const platformClients = allClients.filter((client) =>
+    isPlatformClient(client)
+  );
 
   return (
     <div>
       <PageHeader
         title="Routes & Rates"
-        description="Destination pricing plus livestock per-head rates."
+        description="Destination pricing, livestock per-head rates, and platform splits."
       />
 
       <div className="space-y-8">
         <LivestockRatesPanel clients={livestockClients} />
+        <PlatformRatesPanel clients={platformClients} />
 
         {destinationClients.map((client) => {
           const rates = destinationRates.filter((r) => r.client === client);

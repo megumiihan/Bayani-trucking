@@ -9,5 +9,8 @@ export function mapClientToUi(record: DbClient): Client {
     calculationType: fromPrismaCalculationType(record.calcType),
     pigheadDriverRate: record.pigheadDriverRate,
     pigheadHelperRate: record.pigheadHelperRate,
+    platformShare: record.platformShare,
+    platformDriverRate: record.platformDriverRate,
+    platformHelperRate: record.platformHelperRate,
   };
 }

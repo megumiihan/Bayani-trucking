@@ -51,6 +51,9 @@ export interface Client {
   calculationType: CalculationType;
   pigheadDriverRate?: number | null;
   pigheadHelperRate?: number | null;
+  platformShare?: number | null;
+  platformDriverRate?: number | null;
+  platformHelperRate?: number | null;
 }
 
 export const clients: Client[] = [
@@ -85,6 +88,9 @@ export const clients: Client[] = [
     id: "CLI-MOBERS-001",
     name: "Mobers",
     calculationType: "Platform",
+    platformShare: 0.2,
+    platformDriverRate: 0.17,
+    platformHelperRate: 0.12,
   },
 ];
 
@@ -116,6 +122,16 @@ export function isLivestockClient(
     return getClientByName(client)?.calculationType === "Livestock";
   }
   return client.calculationType === "Livestock";
+}
+
+export function isPlatformClient(
+  client: Pick<Client, "calculationType"> | string | null | undefined
+) {
+  if (!client) return false;
+  if (typeof client === "string") {
+    return getClientByName(client)?.calculationType === "Platform";
+  }
+  return client.calculationType === "Platform";
 }
 
 export function getCalculationTypeLabel(type: CalculationType) {

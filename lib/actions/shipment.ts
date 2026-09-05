@@ -6,9 +6,11 @@ import { requireAdmin, requireUser } from "@/lib/auth";
 import {
   calculateDestinationPayout,
   calculateLivestockPayout,
+  calculatePlatformPayout,
 } from "@/lib/calculations";
 import { LIVESTOCK_MAX_HEADS, parsePighead } from "@/lib/livestock";
 import { isDestinationClient } from "@/lib/clients";
+import { parsePlatformRate } from "@/lib/platform";
 import { mapShipmentLogToShipment } from "@/lib/mappers/shipmentLog";
 import { trimOrNull } from "@/lib/mappers/shipmentRemarks";
 import { prisma } from "@/lib/prisma";
@@ -37,6 +39,7 @@ export interface ShipmentFormInput {
   weightKg?: number | null;
   headCount?: number | null;
   pigheadCount?: number | null;
+  platformRate?: number | null;
 }
 
 export type SaveShipmentResult =
@@ -52,6 +55,9 @@ async function resolveClient(clientName: string) {
       calcType: true,
       pigheadDriverRate: true,
       pigheadHelperRate: true,
+      platformShare: true,
+      platformDriverRate: true,
+      platformHelperRate: true,
     },
   });
 }
@@ -97,6 +103,7 @@ type ResolvedPayout =
       };
       distance: string | null;
       pigheadCount: number | null;
+      platformRate: number | null;
     }
   | { ok: false; error: string };
 
@@ -107,10 +114,14 @@ async function resolvePayout(input: {
     calcType: "DESTINATION" | "WEIGHT" | "ANIMAL_HEADCOUNT" | "PLATFORM";
     pigheadDriverRate: number | null;
     pigheadHelperRate: number | null;
+    platformShare: number | null;
+    platformDriverRate: number | null;
+    platformHelperRate: number | null;
   };
   farthestRoute: string;
   hasExtraHelper: boolean;
   pigheadCount?: number | null;
+  platformRate?: number | null;
 }): Promise<ResolvedPayout> {
   if (input.client.calcType === "ANIMAL_HEADCOUNT") {
     const pigheadCount = parsePighead(input.pigheadCount);
@@ -151,7 +162,46 @@ async function resolvePayout(input: {
       };
     }
 
-    return { ok: true, payout, distance: route.distance || null, pigheadCount };
+    return {
+      ok: true,
+      payout,
+      distance: route.distance || null,
+      pigheadCount,
+      platformRate: null,
+    };
+  }
+
+  if (input.client.calcType === "PLATFORM") {
+    const platformRate = parsePlatformRate(input.platformRate);
+    if (platformRate == null) {
+      return {
+        ok: false,
+        error: "Enter the platform rate for this trip.",
+      };
+    }
+
+    const payout = calculatePlatformPayout({
+      platformRate,
+      platformShare: input.client.platformShare ?? NaN,
+      platformDriverRate: input.client.platformDriverRate ?? NaN,
+      platformHelperRate: input.client.platformHelperRate ?? NaN,
+      hasExtraHelper: input.hasExtraHelper,
+    });
+
+    if (!payout) {
+      return {
+        ok: false,
+        error: `Set platform share and crew rates for ${input.client.name} on Routes & Rates.`,
+      };
+    }
+
+    return {
+      ok: true,
+      payout,
+      distance: null,
+      pigheadCount: null,
+      platformRate,
+    };
   }
 
   if (isDestinationClient(input.client.name)) {
@@ -178,6 +228,7 @@ async function resolvePayout(input: {
       payout,
       distance: selectedRoute?.distance || null,
       pigheadCount: null,
+      platformRate: null,
     };
   }
 
@@ -219,6 +270,7 @@ export async function saveShipment(
       farthestRoute: input.farthestRoute,
       hasExtraHelper: input.hasExtraHelper,
       pigheadCount: input.pigheadCount,
+      platformRate: input.platformRate,
     });
     if (!resolved.ok) {
       return { success: false, error: resolved.error };
@@ -243,6 +295,7 @@ export async function saveShipment(
         weightKg: input.weightKg ?? null,
         headCount: input.headCount ?? null,
         pigheadCount: resolved.pigheadCount,
+        platformRate: resolved.platformRate,
         driverName: input.driver,
         driverId,
         helperName: input.helper || null,
@@ -343,6 +396,7 @@ export interface UpdateShipmentInput {
   flagged: boolean;
   approved: boolean;
   pigheadCount?: number | null;
+  platformRate?: number | null;
 }
 
 export type UpdateShipmentResult =
@@ -398,12 +452,13 @@ export async function updateShipment(
       farthestRoute: input.farthestRoute,
       hasExtraHelper,
       pigheadCount: input.pigheadCount,
+      platformRate: input.platformRate,
     });
     if (!resolved.ok) {
       return { success: false, error: resolved.error };
     }
 
-    const { payout, distance, pigheadCount } = resolved;
+    const { payout, distance, pigheadCount, platformRate } = resolved;
     const driverPayout = payout.driverPayout;
     const helperPayout = payout.helperPayout;
     const extraHelperPayout = payout.extraHelperPayout;
@@ -426,6 +481,7 @@ export async function updateShipment(
         routeName: input.farthestRoute,
         distance,
         pigheadCount,
+        platformRate,
         driverName: input.driver,
         driverId,
         helperName: input.helper || null,

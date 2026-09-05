@@ -1,4 +1,5 @@
 import { parsePighead } from "./livestock";
+import { parsePlatformRate } from "./platform";
 import {
   getDestinationRoute,
   getDestinationRouteById,
@@ -83,6 +84,56 @@ export function calculateLivestockPayout({
 
   const driverPayout = driverBase + heads * driverRate;
   const helperPayout = helperBase + heads * helperRate;
+
+  return {
+    driverPayout,
+    helperPayout,
+    extraHelperPayout: hasExtraHelper ? helperPayout : 0,
+  };
+}
+
+export interface PlatformPayoutInput {
+  platformRate: number;
+  platformShare: number;
+  platformDriverRate: number;
+  platformHelperRate: number;
+  hasExtraHelper: boolean;
+}
+
+/**
+ * Platform payouts: (rate − rate × platform share) × role rate.
+ * Extra helper uses the helper rate.
+ */
+export function calculatePlatformPayout({
+  platformRate,
+  platformShare,
+  platformDriverRate,
+  platformHelperRate,
+  hasExtraHelper,
+}: PlatformPayoutInput): DestinationPayoutResult | null {
+  const rate = parsePlatformRate(platformRate);
+  if (rate == null) return null;
+  if (!Number.isFinite(platformShare) || platformShare < 0 || platformShare > 1) {
+    return null;
+  }
+  if (
+    !Number.isFinite(platformDriverRate) ||
+    platformDriverRate < 0 ||
+    platformDriverRate > 1
+  ) {
+    return null;
+  }
+  if (
+    !Number.isFinite(platformHelperRate) ||
+    platformHelperRate < 0 ||
+    platformHelperRate > 1
+  ) {
+    return null;
+  }
+
+  const afterShare = rate - rate * platformShare;
+  const driverPayout = afterShare * platformDriverRate;
+  const helperPayout = afterShare * platformHelperRate;
 
   return {
     driverPayout,

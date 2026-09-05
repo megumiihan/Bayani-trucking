@@ -83,9 +83,12 @@ model Client {
   id                 String          @id @default(uuid())
   name               String          @unique
   calcType           CalculationType @default(DESTINATION)
-  pigheadDriverRate Float?
-  pigheadHelperRate Float?
-  createdAt          DateTime        @default(now())
+  pigheadDriverRate   Float?
+  pigheadHelperRate   Float?
+  platformShare       Float?
+  platformDriverRate  Float?
+  platformHelperRate  Float?
+  createdAt           DateTime        @default(now())
 
   routes    DestinationRoute[]
   shipments ShipmentLog[]
@@ -133,7 +136,8 @@ model ShipmentLog {
   distance   String?
   weightKg   Float?
   headCount  Int?
-  pigheadCount Int?
+  pigheadCount   Int?
+  platformRate   Float?
 
   // --- Personnel Involved ---
   driverName String // Snapshot driver name

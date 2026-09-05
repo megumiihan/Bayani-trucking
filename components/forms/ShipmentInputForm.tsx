@@ -7,6 +7,7 @@ import { formatTruckLabel, type Truck } from "@/lib/trucks";
 import {
   getCalculationTypeLabel,
   isLivestockClient,
+  isPlatformClient,
   type Client,
 } from "@/lib/clients";
 import { LIVESTOCK_MAX_HEADS } from "@/lib/livestock";
@@ -19,7 +20,9 @@ import {
 import {
   calculateDestinationPayout,
   calculateLivestockPayout,
+  calculatePlatformPayout,
 } from "@/lib/calculations";
+import { fractionToPercentInput } from "@/lib/platform";
 import { saveShipment } from "@/lib/actions/shipment";
 import { useRole } from "@/context/RoleContext";
 import PageHeader from "@/components/ui/PageHeader";
@@ -63,6 +66,7 @@ export default function ShipmentInputForm({
     extraHelperNote: "",
     remarks: "",
     pigheadCount: "",
+    platformRate: "",
   };
 
   const [form, setForm] = useState(initialForm);
@@ -94,6 +98,7 @@ export default function ShipmentInputForm({
   const selectedClient = clients.find((client) => client.name === form.client);
   const usesDestinationRates = selectedClient?.calculationType === "Destination";
   const usesLivestockRates = isLivestockClient(selectedClient);
+  const usesPlatformRates = isPlatformClient(selectedClient);
   const livestockRoutes = routes.filter(
     (route) => route.client === form.client
   );
@@ -131,6 +136,20 @@ export default function ShipmentInputForm({
         hasExtraHelper: form.hasExtraHelper,
       });
     }
+    if (
+      usesPlatformRates &&
+      selectedClient?.platformShare != null &&
+      selectedClient.platformDriverRate != null &&
+      selectedClient.platformHelperRate != null
+    ) {
+      return calculatePlatformPayout({
+        platformRate: Number(form.platformRate),
+        platformShare: selectedClient.platformShare,
+        platformDriverRate: selectedClient.platformDriverRate,
+        platformHelperRate: selectedClient.platformHelperRate,
+        hasExtraHelper: form.hasExtraHelper,
+      });
+    }
     if (usesDestinationRates && form.farthestRoute && selectedRoute) {
       return calculateDestinationPayout({
         client: form.client as DestinationClient,
@@ -147,11 +166,14 @@ export default function ShipmentInputForm({
     form.farthestRoute,
     form.hasExtraHelper,
     form.pigheadCount,
+    form.platformRate,
     helperBase,
     helperHeadRate,
+    selectedClient,
     selectedRoute,
     usesDestinationRates,
     usesLivestockRates,
+    usesPlatformRates,
   ]);
 
   const updateField = <K extends keyof typeof form>(
@@ -182,6 +204,7 @@ export default function ShipmentInputForm({
       clientNumber: client.id,
       farthestRoute: "",
       pigheadCount: "",
+      platformRate: "",
     }));
   };
 
@@ -209,6 +232,7 @@ export default function ShipmentInputForm({
       extraHelperNote: form.extraHelperNote,
       remarks: form.remarks,
       pigheadCount: usesLivestockRates ? Number(form.pigheadCount) : null,
+      platformRate: usesPlatformRates ? Number(form.platformRate) : null,
     });
 
     setIsSubmitting(false);
@@ -357,8 +381,21 @@ export default function ShipmentInputForm({
                 />
               </Field>
 
-              <Field label="Farthest Route" required className="sm:col-span-2">
-                {usesDestinationRates ? (
+              <Field
+                label={usesPlatformRates ? "Destination" : "Farthest Route"}
+                required
+                className="sm:col-span-2"
+              >
+                {usesPlatformRates ? (
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. BGC, Taguig"
+                    value={form.farthestRoute}
+                    onChange={(e) => updateField("farthestRoute", e.target.value)}
+                    className={inputClass}
+                  />
+                ) : usesDestinationRates ? (
                   <SearchableSelect
                     options={routeOptions}
                     value={form.farthestRoute}
@@ -391,6 +428,30 @@ export default function ShipmentInputForm({
                   />
                 )}
               </Field>
+
+              {usesPlatformRates && (
+                <Field label="Platform rate" required>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0.01}
+                    step="0.01"
+                    required
+                    value={form.platformRate}
+                    onChange={(e) => updateField("platformRate", e.target.value)}
+                    placeholder="e.g. 10000"
+                    className={inputClass}
+                  />
+                  <span className="mt-1 block text-xs text-gray-500">
+                    Full trip rate before the platform share. After{" "}
+                    {fractionToPercentInput(selectedClient?.platformShare)}%
+                    share: driver{" "}
+                    {fractionToPercentInput(selectedClient?.platformDriverRate)}%
+                    · helper{" "}
+                    {fractionToPercentInput(selectedClient?.platformHelperRate)}%
+                  </span>
+                </Field>
+              )}
 
               {usesLivestockRates && (
                 <Field label="Number of heads" required>
@@ -554,11 +615,13 @@ export default function ShipmentInputForm({
             <p className="mt-1 text-xs text-blue-600">
               {usesLivestockRates
                 ? `${form.client} livestock · base + heads × per-head rate`
-                : usesDestinationRates
-                  ? `${form.client} destination-based rates`
-                  : selectedClient
-                    ? `${getCalculationTypeLabel(selectedClient.calculationType)} calculation — preview coming soon`
-                    : "Select a client to preview payouts"}
+                : usesPlatformRates
+                  ? `${form.client} platform · rate after share × crew percent`
+                  : usesDestinationRates
+                    ? `${form.client} destination-based rates`
+                    : selectedClient
+                      ? `${getCalculationTypeLabel(selectedClient.calculationType)} calculation — preview coming soon`
+                      : "Select a client to preview payouts"}
             </p>
 
             {payoutPreview ? (
@@ -573,7 +636,9 @@ export default function ShipmentInputForm({
                   <p className="text-xs text-gray-500">
                     {usesLivestockRates
                       ? `₱${driverBase} + ${form.pigheadCount || 0} × ₱${driverHeadRate ?? 0} driver · ₱${helperBase} + ${form.pigheadCount || 0} × ₱${helperHeadRate ?? 0} helper`
-                      : "Estimated rates — final payout may vary once distance is confirmed by operations"}
+                      : usesPlatformRates
+                        ? `₱${form.platformRate || 0} − ${fractionToPercentInput(selectedClient?.platformShare)}% share · driver ${fractionToPercentInput(selectedClient?.platformDriverRate)}% · helper ${fractionToPercentInput(selectedClient?.platformHelperRate)}%`
+                        : "Estimated rates — final payout may vary once distance is confirmed by operations"}
                   </p>
                 </div>
 
@@ -613,9 +678,11 @@ export default function ShipmentInputForm({
               <p className="mt-5 text-sm text-blue-700">
                 {usesLivestockRates
                   ? "Select a farthest route and number of heads to preview livestock payouts."
-                  : usesDestinationRates
-                    ? "Select a client and farthest route to preview destination-based payouts."
-                    : "Payout preview for this client type will be available once its calculation logic is added."}
+                  : usesPlatformRates
+                    ? "Enter a destination and platform rate to preview crew payouts."
+                    : usesDestinationRates
+                      ? "Select a client and farthest route to preview destination-based payouts."
+                      : "Payout preview for this client type will be available once its calculation logic is added."}
               </p>
             )}
           </div>
