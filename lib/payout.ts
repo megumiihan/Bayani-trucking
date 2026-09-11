@@ -2,7 +2,10 @@ import {
   resolveShipmentRate,
   type DestinationClient,
 } from "./rates";
-import { calculateDestinationPayout } from "./calculations";
+import {
+  calculateDestinationPayout,
+  hasAssignedHelper,
+} from "./calculations";
 import type { Shipment } from "./mockData";
 import type { SalaryPaymentUi } from "./mappers/salaryPayment";
 
@@ -253,6 +256,7 @@ export function getHelperPayoutForShipment(
   distanceBand?: string | null,
   shipment?: Shipment
 ): number {
+  if (shipment && !hasAssignedHelper(shipment.helper)) return 0;
   if (shipment?.helperPayout != null) return shipment.helperPayout;
   return getPayoutForRole(farthestRoute, "Helper", client, distanceBand);
 }
@@ -285,12 +289,14 @@ export function getShipmentTotalPayout(shipment: Shipment): number {
     shipment.client,
     shipment.distanceBand
   );
-  const helper = getPayoutForRole(
-    shipment.farthestRoute,
-    "Helper",
-    shipment.client,
-    shipment.distanceBand
-  );
+  const helper = hasAssignedHelper(shipment.helper)
+    ? getPayoutForRole(
+        shipment.farthestRoute,
+        "Helper",
+        shipment.client,
+        shipment.distanceBand
+      )
+    : 0;
   const extra = shipment.extraHelper
     ? getPayoutForRole(
         shipment.farthestRoute,

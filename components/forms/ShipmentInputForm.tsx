@@ -23,6 +23,7 @@ import {
   calculateLivestockPayout,
   calculatePlatformPayout,
   calculateWeightPayout,
+  hasAssignedHelper,
 } from "@/lib/calculations";
 import { fractionToPercentInput } from "@/lib/platform";
 import { uniqueWeightRouteNames, weightTiersForRoute } from "@/lib/weight";
@@ -132,7 +133,9 @@ export default function ShipmentInputForm({
   const selectedExtraHelper = employees.find(
     (employee) => employee.name === form.extraHelper
   );
-  const driverAsHelper = selectedHelper?.role === "Driver";
+  const hasHelper = hasAssignedHelper(form.helper);
+  const driverAsHelper = hasHelper && selectedHelper?.role === "Driver";
+  const helpersIncludeDrivers = usesWeightRates || usesDestinationRates;
   const livestockRoutes = routes.filter(
     (route) => route.client === form.client
   );
@@ -168,6 +171,7 @@ export default function ShipmentInputForm({
         driverRate: driverHeadRate,
         helperRate: helperHeadRate,
         hasExtraHelper: form.hasExtraHelper,
+        hasHelper,
       });
     }
     if (usesWeightRates && selectedWeightRoute) {
@@ -185,6 +189,7 @@ export default function ShipmentInputForm({
           selectedDriver && selectedHelper && selectedDriver.id === selectedHelper.id
         ),
         hasExtraHelper: form.hasExtraHelper,
+        hasHelper,
       });
     }
     if (
@@ -199,6 +204,7 @@ export default function ShipmentInputForm({
         platformDriverRate: selectedClient.platformDriverRate,
         platformHelperRate: selectedClient.platformHelperRate,
         hasExtraHelper: form.hasExtraHelper,
+        hasHelper,
       });
     }
     if (usesDestinationRates && form.farthestRoute && selectedRoute) {
@@ -207,6 +213,7 @@ export default function ShipmentInputForm({
         routeName: form.farthestRoute,
         distance: selectedRoute.distance,
         hasExtraHelper: form.hasExtraHelper,
+        hasHelper,
       });
     }
     return null;
@@ -216,6 +223,8 @@ export default function ShipmentInputForm({
     form.client,
     form.farthestRoute,
     form.hasExtraHelper,
+    form.helper,
+    hasHelper,
     form.pigheadCount,
     form.platformRate,
     form.weightKg,
@@ -601,18 +610,17 @@ export default function ShipmentInputForm({
                 </select>
               </Field>
 
-              <Field label="Helper" required>
+              <Field label="Helper">
                 <select
-                  required
                   value={form.helper}
                   onChange={(e) => updateField("helper", e.target.value)}
                   className={inputClass}
                 >
-                  <option value="">Select helper</option>
-                  {(usesWeightRates ? [...helpers, ...drivers] : helpers).map(
+                  <option value="">Not applicable</option>
+                  {(helpersIncludeDrivers ? [...helpers, ...drivers] : helpers).map(
                     (helper) => (
                       <option key={helper.id} value={helper.name}>
-                        {usesWeightRates && helper.role === "Driver"
+                        {helpersIncludeDrivers && helper.role === "Driver"
                           ? `${helper.name} (driver)`
                           : helper.name}
                       </option>
@@ -622,6 +630,11 @@ export default function ShipmentInputForm({
                 {usesWeightRates && driverAsHelper && (
                   <span className="mt-1 block text-xs text-amber-700">
                     This helper is a driver. Payout uses the same-driver rate.
+                  </span>
+                )}
+                {usesDestinationRates && driverAsHelper && (
+                  <span className="mt-1 block text-xs text-slate-600">
+                    This helper is a driver. Payout uses the helper rate.
                   </span>
                 )}
               </Field>
@@ -771,7 +784,11 @@ export default function ShipmentInputForm({
                   amount={payoutPreview.driverPayout}
                 />
                 <PayoutRow
-                  label={form.helper ? `Helper — ${form.helper}` : "Helper Rate"}
+                  label={
+                    form.helper
+                      ? `Helper — ${form.helper}`
+                      : "Helper — Not applicable"
+                  }
                   amount={payoutPreview.helperPayout}
                 />
 

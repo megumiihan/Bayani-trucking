@@ -9,12 +9,17 @@ import {
   type DestinationClient,
 } from "./rates";
 
+export function hasAssignedHelper(helper?: string | null): boolean {
+  return Boolean(helper?.trim());
+}
+
 export interface DestinationPayoutInput {
   client: DestinationClient;
   routeName: string;
   distance?: string;
   routeId?: string;
   hasExtraHelper: boolean;
+  hasHelper?: boolean;
 }
 
 export interface DestinationPayoutResult {
@@ -36,6 +41,7 @@ export function calculateDestinationPayout({
   distance = "",
   routeId,
   hasExtraHelper,
+  hasHelper = true,
 }: DestinationPayoutInput): DestinationPayoutResult | null {
   const rate = routeId
     ? getDestinationRouteById(routeId)
@@ -50,7 +56,7 @@ export function calculateDestinationPayout({
 
   return {
     driverPayout: rate.driverBaseRate,
-    helperPayout: rate.helperBaseRate,
+    helperPayout: hasHelper ? rate.helperBaseRate : 0,
     extraHelperPayout,
   };
 }
@@ -62,6 +68,7 @@ export interface LivestockPayoutInput {
   driverRate: number;
   helperRate: number;
   hasExtraHelper: boolean;
+  hasHelper?: boolean;
 }
 
 /**
@@ -75,6 +82,7 @@ export function calculateLivestockPayout({
   driverRate,
   helperRate,
   hasExtraHelper,
+  hasHelper = true,
 }: LivestockPayoutInput): DestinationPayoutResult | null {
   const heads = parsePighead(pighead);
   if (heads == null) return null;
@@ -84,12 +92,12 @@ export function calculateLivestockPayout({
   if (!Number.isFinite(helperRate) || helperRate < 0) return null;
 
   const driverPayout = driverBase + heads * driverRate;
-  const helperPayout = helperBase + heads * helperRate;
+  const helperShare = helperBase + heads * helperRate;
 
   return {
     driverPayout,
-    helperPayout,
-    extraHelperPayout: hasExtraHelper ? helperPayout : 0,
+    helperPayout: hasHelper ? helperShare : 0,
+    extraHelperPayout: hasExtraHelper ? helperShare : 0,
   };
 }
 
@@ -99,6 +107,7 @@ export interface PlatformPayoutInput {
   platformDriverRate: number;
   platformHelperRate: number;
   hasExtraHelper: boolean;
+  hasHelper?: boolean;
 }
 
 /**
@@ -111,6 +120,7 @@ export function calculatePlatformPayout({
   platformDriverRate,
   platformHelperRate,
   hasExtraHelper,
+  hasHelper = true,
 }: PlatformPayoutInput): DestinationPayoutResult | null {
   const rate = parsePlatformRate(platformRate);
   if (rate == null) return null;
@@ -134,12 +144,12 @@ export function calculatePlatformPayout({
 
   const afterShare = rate - rate * platformShare;
   const driverPayout = afterShare * platformDriverRate;
-  const helperPayout = afterShare * platformHelperRate;
+  const helperShare = afterShare * platformHelperRate;
 
   return {
     driverPayout,
-    helperPayout,
-    extraHelperPayout: hasExtraHelper ? helperPayout : 0,
+    helperPayout: hasHelper ? helperShare : 0,
+    extraHelperPayout: hasExtraHelper ? helperShare : 0,
   };
 }
 
@@ -155,6 +165,7 @@ export interface WeightPayoutInput {
   driverAsHelper: boolean;
   samePerson: boolean;
   hasExtraHelper: boolean;
+  hasHelper?: boolean;
 }
 
 function weightRoleRate(
@@ -194,6 +205,7 @@ export function calculateWeightPayout({
   driverAsHelper,
   samePerson,
   hasExtraHelper,
+  hasHelper = true,
 }: WeightPayoutInput): DestinationPayoutResult | null {
   const rates = {
     helperRate,
@@ -205,9 +217,15 @@ export function calculateWeightPayout({
   const values = Object.values(rates);
   if (values.some((value) => !Number.isFinite(value) || value < 0)) return null;
 
-  const driverPayout = weightRoleRate(rates, "driver", driverExp, driverAsHelper);
-  const helperPayout =
-    driverAsHelper && samePerson
+  const driverPayout = weightRoleRate(
+    rates,
+    "driver",
+    driverExp,
+    hasHelper && driverAsHelper
+  );
+  const helperPayout = !hasHelper
+    ? 0
+    : driverAsHelper && samePerson
       ? 0
       : weightRoleRate(rates, "helper", helperExp, driverAsHelper);
   const extraHelperPayout = hasExtraHelper

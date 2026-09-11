@@ -576,7 +576,9 @@ function MasterTableRow({
         </p>
       </td>
       <td className="px-4 py-3.5">
-        <p className="font-medium text-slate-900">{shipment.helper}</p>
+        <p className="font-medium text-slate-900">
+          {shipment.helper || "—"}
+        </p>
         <p className="text-xs font-mono tabular-nums text-emerald-700">
           {formatCurrency(helperRate)}
         </p>

@@ -223,7 +223,8 @@ export default function EditShipmentModal({
     drivers,
     employees.find((employee) => employee.name === form.driver)
   );
-  const helperPool = usesWeightRates ? [...helpers, ...drivers] : helpers;
+  const helpersIncludeDrivers = usesWeightRates || usesDestinationRates;
+  const helperPool = helpersIncludeDrivers ? [...helpers, ...drivers] : helpers;
   const helperOptions = includeCurrent(
     helperPool,
     employees.find((employee) => employee.name === form.helper)
@@ -469,10 +470,10 @@ export default function EditShipmentModal({
                   onChange={(e) => updateField("helper", e.target.value)}
                   className={inputClass}
                 >
-                  <option value="">Select helper</option>
+                  <option value="">Not applicable</option>
                   {helperOptions.map((helper) => (
                     <option key={helper.id} value={helper.name}>
-                      {usesWeightRates && helper.role === "Driver"
+                      {helpersIncludeDrivers && helper.role === "Driver"
                         ? `${helper.name} (driver)`
                         : helper.name}
                     </option>

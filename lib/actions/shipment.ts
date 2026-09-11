@@ -8,6 +8,7 @@ import {
   calculateLivestockPayout,
   calculatePlatformPayout,
   calculateWeightPayout,
+  hasAssignedHelper,
 } from "@/lib/calculations";
 import { LIVESTOCK_MAX_HEADS, parsePighead } from "@/lib/livestock";
 import { isDestinationClient } from "@/lib/clients";
@@ -131,6 +132,8 @@ async function resolvePayout(input: {
   helper?: string | null;
   extraHelper?: string | null;
 }): Promise<ResolvedPayout> {
+  const hasHelper = hasAssignedHelper(input.helper);
+
   if (input.client.calcType === "ANIMAL_HEADCOUNT") {
     const pigheadCount = parsePighead(input.pigheadCount);
     if (pigheadCount == null) {
@@ -161,6 +164,7 @@ async function resolvePayout(input: {
       driverRate: input.client.pigheadDriverRate ?? NaN,
       helperRate: input.client.pigheadHelperRate ?? NaN,
       hasExtraHelper: input.hasExtraHelper,
+      hasHelper,
     });
 
     if (!payout) {
@@ -227,7 +231,9 @@ async function resolvePayout(input: {
     ]);
 
     const driverAsHelper =
-      helper != null && (helper.role === "DRIVER" || helper.role === "BOTH");
+      hasHelper &&
+      helper != null &&
+      (helper.role === "DRIVER" || helper.role === "BOTH");
 
     const payout = calculateWeightPayout({
       helperRate: route.helperBaseRate,
@@ -241,6 +247,7 @@ async function resolvePayout(input: {
       driverAsHelper,
       samePerson: Boolean(driver && helper && driver.id === helper.id),
       hasExtraHelper: input.hasExtraHelper,
+      hasHelper,
     });
 
     if (!payout) {
@@ -276,6 +283,7 @@ async function resolvePayout(input: {
       platformDriverRate: input.client.platformDriverRate ?? NaN,
       platformHelperRate: input.client.platformHelperRate ?? NaN,
       hasExtraHelper: input.hasExtraHelper,
+      hasHelper,
     });
 
     if (!payout) {
@@ -306,6 +314,7 @@ async function resolvePayout(input: {
       routeName: input.farthestRoute,
       distance: selectedRoute?.distance ?? "",
       hasExtraHelper: input.hasExtraHelper,
+      hasHelper,
     });
 
     if (!payout) {
@@ -377,7 +386,9 @@ export async function saveShipment(
     const [truckId, driverId, helperId] = await Promise.all([
       resolveTruckId(input.truckId, input.plateNumber),
       resolveEmployeeId(input.driver),
-      input.helper ? resolveEmployeeId(input.helper) : Promise.resolve(null),
+      hasAssignedHelper(input.helper)
+        ? resolveEmployeeId(input.helper!)
+        : Promise.resolve(null),
     ]);
 
     const record = await prisma.shipmentLog.create({
@@ -397,7 +408,7 @@ export async function saveShipment(
         platformRate: resolved.platformRate,
         driverName: input.driver,
         driverId,
-        helperName: input.helper || null,
+        helperName: hasAssignedHelper(input.helper) ? input.helper!.trim() : null,
         helperId,
         hasExtraHelper: input.hasExtraHelper,
         extraHelperName: input.hasExtraHelper ? input.extraHelper || null : null,
@@ -644,7 +655,9 @@ export async function updateShipment(
     const [truckId, driverId, helperId] = await Promise.all([
       resolveTruckId(input.truckId, input.plateNumber),
       resolveEmployeeId(input.driver),
-      input.helper ? resolveEmployeeId(input.helper) : Promise.resolve(null),
+      hasAssignedHelper(input.helper)
+        ? resolveEmployeeId(input.helper!)
+        : Promise.resolve(null),
     ]);
 
     const updated = await prisma.shipmentLog.update({
@@ -664,7 +677,7 @@ export async function updateShipment(
         platformRate,
         driverName: input.driver,
         driverId,
-        helperName: input.helper || null,
+        helperName: hasAssignedHelper(input.helper) ? input.helper!.trim() : null,
         helperId,
         extraHelperName: hasExtraHelper ? input.extraHelper || null : null,
         hasExtraHelper,
