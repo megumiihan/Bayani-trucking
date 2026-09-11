@@ -18,6 +18,7 @@ import {
 } from "@/lib/rates";
 import type { UpdateShipmentInput } from "@/lib/actions/shipment";
 import SearchableSelect from "@/components/ui/SearchableSelect";
+import { inputClass } from "@/components/ui/formStyles";
 
 interface EditShipmentModalProps {
   shipment: Shipment | null;
@@ -236,16 +237,23 @@ export default function EditShipmentModal({
         className="absolute inset-0 bg-gray-900/50"
         onClick={isSaving ? undefined : onClose}
       />
-      <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
+      <div
+        role="dialog"
+        aria-labelledby="edit-shipment-title"
+        aria-modal="true"
+        className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl"
+      >
         <div className="border-b border-gray-100 px-6 py-4">
-          <h2 className="text-lg font-semibold text-gray-900">Edit Shipment</h2>
+          <h2 id="edit-shipment-title" className="text-lg font-semibold text-gray-900">
+            Edit Shipment
+          </h2>
           <p className="mt-1 font-mono text-sm text-gray-500">
             {shipment.shipmentNumber}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-          <div className="space-y-5 overflow-y-auto px-6 py-5">
+          <div className="space-y-5 overflow-y-auto overscroll-contain px-6 py-5">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Date" required>
                 <input
@@ -530,6 +538,7 @@ export default function EditShipmentModal({
 
             <Field label="Remarks">
               <textarea
+                name="remarks"
                 rows={3}
                 value={form.remarks}
                 onChange={(e) => updateField("remarks", e.target.value)}
@@ -566,6 +575,7 @@ export default function EditShipmentModal({
             {error && (
               <p
                 role="alert"
+                aria-live="polite"
                 className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
               >
                 {error}
@@ -626,5 +636,3 @@ function Field({
   );
 }
 
-const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20";

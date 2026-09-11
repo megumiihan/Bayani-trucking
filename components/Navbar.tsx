@@ -30,18 +30,18 @@ export default function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-gray-200 bg-white shadow-sm">
+    <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        {/* Logo */}
         <Link
           href={role === "employee" ? "/employee/shipments/new" : "/"}
-          className="flex items-center gap-2"
+          className="flex items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-700 text-sm font-bold text-white">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-700 to-blue-900 text-sm font-bold text-white shadow-sm">
             BT
           </div>
           <div className="leading-tight">
-            <p className="text-sm font-bold text-gray-900">Bayani Trucking</p>
+            <p className="text-sm font-bold text-slate-900">Bayani Trucking</p>
+            <p className="hidden text-xs text-slate-500 sm:block">Fleet operations</p>
           </div>
         </Link>
 
@@ -56,10 +56,10 @@ export default function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 ${
                   isActive
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                 }`}
               >
                 {link.label}
@@ -96,10 +96,10 @@ export default function Navbar() {
             <Link
               key={link.href}
               href={link.href}
-              className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 ${
                 isActive
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-gray-600 hover:bg-gray-50"
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-600 hover:bg-slate-100"
               }`}
             >
               {link.label}
@@ -125,7 +125,7 @@ function RoleSwitcher({
         <button
           type="button"
           onClick={() => onChange("employee")}
-          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-[color,background-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 ${
             role === "employee"
               ? "bg-white text-blue-700 shadow-sm"
               : "text-gray-500 hover:text-gray-700"
@@ -136,7 +136,7 @@ function RoleSwitcher({
         <button
           type="button"
           onClick={() => onChange("admin")}
-          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-[color,background-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 ${
             role === "admin"
               ? "bg-white text-blue-700 shadow-sm"
               : "text-gray-500 hover:text-gray-700"

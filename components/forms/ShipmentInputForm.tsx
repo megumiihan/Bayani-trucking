@@ -30,9 +30,19 @@ import { saveShipment } from "@/lib/actions/shipment";
 import { useRole } from "@/context/RoleContext";
 import PageHeader from "@/components/ui/PageHeader";
 import SearchableSelect from "@/components/ui/SearchableSelect";
+import { inputClass } from "@/components/ui/formStyles";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function scrollToTop() {
+  window.scrollTo({
+    top: 0,
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? "auto"
+      : "smooth",
+  });
 }
 
 interface ShipmentInputFormProps {
@@ -289,7 +299,7 @@ export default function ShipmentInputForm({
 
     if (!result.success) {
       setErrorMessage(result.error);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      scrollToTop();
       return;
     }
 
@@ -297,7 +307,7 @@ export default function ShipmentInputForm({
     setForm({ ...initialForm, date: todayISO() });
     router.refresh();
 
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    scrollToTop();
     setTimeout(() => setShowSuccess(false), 5000);
   };
 
@@ -323,6 +333,7 @@ export default function ShipmentInputForm({
             viewBox="0 0 24 24"
             strokeWidth={2}
             stroke="currentColor"
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -340,6 +351,7 @@ export default function ShipmentInputForm({
       {showSuccess && (
         <div
           role="status"
+          aria-live="polite"
           className="mb-6 flex items-center gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
         >
           <svg
@@ -348,6 +360,7 @@ export default function ShipmentInputForm({
             viewBox="0 0 24 24"
             strokeWidth={2}
             stroke="currentColor"
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -623,6 +636,7 @@ export default function ShipmentInputForm({
                   </p>
                 </div>
                 <ToggleSwitch
+                  ariaLabel="Extra helper"
                   checked={form.hasExtraHelper}
                   onChange={(checked) => {
                     updateField("hasExtraHelper", checked);
@@ -655,7 +669,7 @@ export default function ShipmentInputForm({
                   <Field label="Reason for Extra Helper" required>
                     <input
                       type="text"
-                      placeholder="e.g. Heavy load at warehouse"
+                      placeholder="e.g. Heavy load at warehouse…"
                       value={form.extraHelperNote}
                       onChange={(e) =>
                         updateField("extraHelperNote", e.target.value)
@@ -669,13 +683,16 @@ export default function ShipmentInputForm({
           </FormSection>
 
           <FormSection title="Remarks">
-            <textarea
-              rows={3}
-              placeholder="Optional notes about this delivery..."
-              value={form.remarks}
-              onChange={(e) => updateField("remarks", e.target.value)}
-              className={inputClass}
-            />
+            <Field label="Remarks">
+              <textarea
+                name="remarks"
+                rows={3}
+                placeholder="Optional notes about this delivery…"
+                value={form.remarks}
+                onChange={(e) => updateField("remarks", e.target.value)}
+                className={inputClass}
+              />
+            </Field>
           </FormSection>
 
           <button
@@ -685,7 +702,7 @@ export default function ShipmentInputForm({
           >
             {isSubmitting && (
               <svg
-                className="h-4 w-4 animate-spin"
+                className="h-4 w-4 animate-spin motion-reduce:animate-none"
                 fill="none"
                 viewBox="0 0 24 24"
                 aria-hidden="true"
@@ -856,7 +873,7 @@ function PayoutRow({
         {label}
       </span>
       <span
-        className={`font-mono ${emphasized ? "text-lg font-bold text-blue-800" : "font-semibold text-gray-900"}`}
+        className={`font-mono tabular-nums ${emphasized ? "text-lg font-bold text-blue-800" : "font-semibold text-gray-900"}`}
       >
         {formatCurrency(amount)}
       </span>
@@ -867,17 +884,26 @@ function PayoutRow({
 function ToggleSwitch({
   checked,
   onChange,
+  ariaLabel,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
+  ariaLabel: string;
 }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={ariaLabel}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+      onKeyDown={(event) => {
+        if (event.key === " " || event.key === "Enter") {
+          event.preventDefault();
+          onChange(!checked);
+        }
+      }}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 ${
         checked ? "bg-blue-600" : "bg-gray-200"
       }`}
     >
@@ -889,6 +915,3 @@ function ToggleSwitch({
     </button>
   );
 }
-
-const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20";

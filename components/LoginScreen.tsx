@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "@/lib/actions/auth";
+import { inputClassPlain } from "@/components/ui/formStyles";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -51,6 +52,7 @@ export default function LoginScreen() {
           {error && (
             <p
               role="alert"
+              aria-live="polite"
               className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
             >
               {error}
@@ -66,12 +68,14 @@ export default function LoginScreen() {
             </label>
             <input
               id="email"
+              name="email"
               type="email"
               required
               autoComplete="email"
+              spellCheck={false}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className={inputClassPlain}
             />
           </div>
 
@@ -84,19 +88,20 @@ export default function LoginScreen() {
             </label>
             <input
               id="password"
+              name="password"
               type="password"
               required
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className={inputClassPlain}
             />
           </div>
 
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+            className="w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:bg-gray-300"
           >
             {isSubmitting ? "Signing in…" : "Sign in"}
           </button>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Shipment } from "@/lib/mockData";
+import { inputClassDanger } from "@/components/ui/formStyles";
 
 interface DeleteShipmentModalProps {
   shipment: Shipment | null;
@@ -42,7 +43,8 @@ export default function DeleteShipmentModal({
       <div
         role="dialog"
         aria-labelledby="delete-shipment-title"
-        className="relative w-full max-w-lg rounded-xl border border-gray-200 bg-white p-6 shadow-xl"
+        aria-modal="true"
+        className="relative w-full max-w-lg overscroll-contain rounded-xl border border-gray-200 bg-white p-6 shadow-xl"
       >
         <h2
           id="delete-shipment-title"
@@ -89,11 +91,13 @@ export default function DeleteShipmentModal({
             </span>
             <input
               type="text"
+              name="confirmShipmentNumber"
               autoComplete="off"
+              spellCheck={false}
               value={typedNumber}
               onChange={(e) => setTypedNumber(e.target.value)}
-              placeholder={shipment.shipmentNumber}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+              placeholder={`e.g. ${shipment.shipmentNumber}`}
+              className={inputClassDanger}
             />
           </label>
         )}
@@ -101,6 +105,7 @@ export default function DeleteShipmentModal({
         {error && (
           <p
             role="alert"
+            aria-live="polite"
             className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
           >
             {error}

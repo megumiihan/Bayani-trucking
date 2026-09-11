@@ -53,6 +53,8 @@ model Profile {
   createdShipments ShipmentLog[]
   recordedPayments SalaryPayment[]
   loggedExpenses   Expense[]
+  rateChanges       DestinationRateHistory[]
+  clientRateChanges ClientRateHistory[]
 }
 
 enum AppRole {
@@ -92,8 +94,10 @@ model Client {
   platformHelperRate  Float?
   createdAt           DateTime        @default(now())
 
-  routes    DestinationRoute[]
-  shipments ShipmentLog[]
+  routes           DestinationRoute[]
+  shipments        ShipmentLog[]
+  rateHistory      DestinationRateHistory[]
+  clientRateHistory ClientRateHistory[]
 }
 
 enum CalculationType {
@@ -120,7 +124,59 @@ model DestinationRoute {
   newHelperRate       Float?
   createdAt           DateTime @default(now())
 
+  rateHistory DestinationRateHistory[]
+
   @@unique([clientId, routeName, distance, weightKg])
+}
+
+// Audit log when admins change destination-based route rates.
+model DestinationRateHistory {
+  id                     String            @id @default(uuid())
+  clientId               String
+  client                 Client            @relation(fields: [clientId], references: [id])
+  destinationRouteId     String?
+  destinationRoute       DestinationRoute? @relation(fields: [destinationRouteId], references: [id], onDelete: SetNull)
+  routeName              String
+  distance               String            @default("")
+  prevDriverBaseRate     Float
+  prevHelperBaseRate     Float
+  prevExtraHelperBaseRate Float
+  newDriverBaseRate      Float
+  newHelperBaseRate      Float
+  newExtraHelperBaseRate Float
+  changedById            String
+  changedBy              Profile           @relation(fields: [changedById], references: [id])
+  changedAt              DateTime          @default(now())
+
+  @@index([clientId, changedAt(sort: Desc)])
+}
+
+enum ClientRateHistoryKind {
+  LIVESTOCK
+  PLATFORM
+}
+
+// Audit log when admins change livestock or platform client-level rates.
+model ClientRateHistory {
+  id                      String                @id @default(uuid())
+  clientId                String
+  client                  Client                @relation(fields: [clientId], references: [id])
+  kind                    ClientRateHistoryKind
+  prevPigheadDriverRate   Float?
+  prevPigheadHelperRate   Float?
+  newPigheadDriverRate    Float?
+  newPigheadHelperRate    Float?
+  prevPlatformShare       Float?
+  prevPlatformDriverRate  Float?
+  prevPlatformHelperRate  Float?
+  newPlatformShare        Float?
+  newPlatformDriverRate   Float?
+  newPlatformHelperRate   Float?
+  changedById             String
+  changedBy               Profile               @relation(fields: [changedById], references: [id])
+  changedAt               DateTime              @default(now())
+
+  @@index([clientId, kind, changedAt(sort: Desc)])
 }
 
 // 5. SHIPMENT LOGS (Transactional Event)

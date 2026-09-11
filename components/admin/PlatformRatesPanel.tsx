@@ -10,6 +10,7 @@ import {
   fractionToPercentInput,
   parsePercentToFraction,
 } from "@/lib/platform";
+import ClientRateHistoryModal from "@/components/admin/ClientRateHistoryModal";
 
 interface PlatformRatesPanelProps {
   clients: Client[];
@@ -25,6 +26,8 @@ export default function PlatformRatesPanel({
   const [newHelperRate, setNewHelperRate] = useState("12");
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [historyClientId, setHistoryClientId] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
 
   const handleCreate = async (event: FormEvent) => {
     event.preventDefault();
@@ -65,16 +68,41 @@ export default function PlatformRatesPanel({
   };
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-      <div className="border-b border-gray-100 px-6 py-4">
-        <h2 className="text-base font-semibold text-gray-900">
-          Platform rates
-        </h2>
-        <p className="mt-1 text-sm text-gray-500">
-          Each trip types a destination and a platform rate. Crew pay is (rate −
-          rate × platform share) × driver or helper percent. Changing these
-          updates new trips, not past payout snapshots.
-        </p>
+    <div className="card-surface overflow-hidden rounded-2xl">
+      <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Platform rates</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Each trip types a destination and a platform rate. Crew pay is (rate −
+            rate × platform share) × driver or helper percent. Changing these
+            updates new trips, not past payout snapshots.
+          </p>
+        </div>
+        {rows.length > 0 && (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <select
+              value={historyClientId}
+              onChange={(e) => setHistoryClientId(e.target.value)}
+              aria-label="Client for rate history"
+              className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-700"
+            >
+              <option value="">Select client…</option>
+              {rows.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={!historyClientId}
+              onClick={() => setShowHistory(true)}
+              className="text-sm font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Rate history
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="overflow-x-auto">
@@ -112,6 +140,10 @@ export default function PlatformRatesPanel({
                       )
                     )
                   }
+                  onViewHistory={() => {
+                    setHistoryClientId(client.id);
+                    setShowHistory(true);
+                  }}
                 />
               ))
             )}
@@ -183,6 +215,16 @@ export default function PlatformRatesPanel({
           </p>
         )}
       </form>
+
+      <ClientRateHistoryModal
+        open={showHistory}
+        clientId={historyClientId || null}
+        clientName={
+          rows.find((client) => client.id === historyClientId)?.name ?? ""
+        }
+        kind="PLATFORM"
+        onClose={() => setShowHistory(false)}
+      />
     </div>
   );
 }
@@ -190,9 +232,11 @@ export default function PlatformRatesPanel({
 function PlatformRateRow({
   client,
   onSaved,
+  onViewHistory,
 }: {
   client: Client;
   onSaved: (client: Client) => void;
+  onViewHistory: () => void;
 }) {
   const [share, setShare] = useState(fractionToPercentInput(client.platformShare));
   const [driverRate, setDriverRate] = useState(
@@ -278,14 +322,23 @@ function PlatformRateRow({
         />
       </td>
       <td className="px-4 py-3">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={isSaving}
-          className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
-        >
-          {isSaving ? "Saving…" : "Save"}
-        </button>
+        <div className="flex flex-col items-start gap-1">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isSaving}
+            className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+          >
+            {isSaving ? "Saving…" : "Save"}
+          </button>
+          <button
+            type="button"
+            onClick={onViewHistory}
+            className="text-xs font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
+          >
+            Rate history
+          </button>
+        </div>
         {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
       </td>
     </tr>

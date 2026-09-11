@@ -8,6 +8,7 @@ import {
 } from "@/lib/actions/client";
 import type { Client } from "@/lib/clients";
 import { formatCurrency } from "@/lib/mockData";
+import ClientRateHistoryModal from "@/components/admin/ClientRateHistoryModal";
 
 interface LivestockRatesPanelProps {
   clients: Client[];
@@ -29,6 +30,8 @@ export default function LivestockRatesPanel({
   const [isAddingRoute, setIsAddingRoute] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routeMessage, setRouteMessage] = useState<string | null>(null);
+  const [historyClientId, setHistoryClientId] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
 
   const handleCreate = async (event: FormEvent) => {
     event.preventDefault();
@@ -81,15 +84,42 @@ export default function LivestockRatesPanel({
   };
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-      <div className="border-b border-gray-100 px-6 py-4">
-        <h2 className="text-base font-semibold text-gray-900">
-          Livestock per-head rates
-        </h2>
-        <p className="mt-1 text-sm text-gray-500">
-          Payout is the route’s driver/helper base + (heads × these per-head
-          rates). Add farthest routes below or in the client tables.
-        </p>
+    <div className="card-surface overflow-hidden rounded-2xl">
+      <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">
+            Livestock per-head rates
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Payout is the route’s driver/helper base + (heads × these per-head
+            rates). Add farthest routes below or in the client tables.
+          </p>
+        </div>
+        {rows.length > 0 && (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <select
+              value={historyClientId}
+              onChange={(e) => setHistoryClientId(e.target.value)}
+              aria-label="Client for rate history"
+              className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-700"
+            >
+              <option value="">Select client…</option>
+              {rows.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={!historyClientId}
+              onClick={() => setShowHistory(true)}
+              className="text-sm font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Rate history
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="overflow-x-auto">
@@ -125,6 +155,10 @@ export default function LivestockRatesPanel({
                       )
                     )
                   }
+                  onViewHistory={() => {
+                    setHistoryClientId(client.id);
+                    setShowHistory(true);
+                  }}
                 />
               ))
             )}
@@ -289,6 +323,16 @@ export default function LivestockRatesPanel({
           )}
         </form>
       )}
+
+      <ClientRateHistoryModal
+        open={showHistory}
+        clientId={historyClientId || null}
+        clientName={
+          rows.find((client) => client.id === historyClientId)?.name ?? ""
+        }
+        kind="LIVESTOCK"
+        onClose={() => setShowHistory(false)}
+      />
     </div>
   );
 }
@@ -296,9 +340,11 @@ export default function LivestockRatesPanel({
 function LivestockRateRow({
   client,
   onSaved,
+  onViewHistory,
 }: {
   client: Client;
   onSaved: (client: Client) => void;
+  onViewHistory: () => void;
 }) {
   const [driverRate, setDriverRate] = useState(
     String(client.pigheadDriverRate ?? "")
@@ -361,14 +407,23 @@ function LivestockRateRow({
         </p>
       </td>
       <td className="px-4 py-3">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={isSaving}
-          className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
-        >
-          {isSaving ? "Saving…" : "Save"}
-        </button>
+        <div className="flex flex-col items-start gap-1">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isSaving}
+            className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+          >
+            {isSaving ? "Saving…" : "Save"}
+          </button>
+          <button
+            type="button"
+            onClick={onViewHistory}
+            className="text-xs font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
+          >
+            Rate history
+          </button>
+        </div>
         {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
       </td>
     </tr>

@@ -30,7 +30,7 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-gray-50 antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} min-h-screen antialiased page-gradient`}
       >
         {user ? (
           <RoleProvider

@@ -409,6 +409,7 @@ export async function saveShipment(
         extraHelperPayout: resolved.payout.extraHelperPayout,
         remarks: buildRemarks(input),
         isFlagged: false,
+        isApproved: user.role === "admin",
         clientId: client.id,
         createdById: user.id,
       },
@@ -434,6 +435,79 @@ export async function saveShipment(
 export type ToggleShipmentFlagResult =
   | { success: true; shipment: Shipment }
   | { success: false; error: string };
+
+export type SetShipmentApprovalResult =
+  | { success: true; shipment: Shipment }
+  | { success: false; error: string };
+
+export type ApproveShipmentsResult =
+  | { success: true; count: number }
+  | { success: false; error: string };
+
+export async function setShipmentApproval(
+  id: string,
+  approved: boolean
+): Promise<SetShipmentApprovalResult> {
+  try {
+    await requireAdmin();
+
+    const updated = await prisma.shipmentLog.update({
+      where: { id },
+      data: { isApproved: approved },
+      include: { client: { select: { name: true } } },
+    });
+
+    revalidatePath("/");
+    revalidatePath("/employee/profile");
+    revalidatePath("/admin/employees");
+
+    return {
+      success: true,
+      shipment: mapShipmentLogToShipment(updated),
+    };
+  } catch (error) {
+    console.error("[setShipmentApproval]", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred while updating approval.",
+    };
+  }
+}
+
+export async function approveShipments(
+  ids: string[]
+): Promise<ApproveShipmentsResult> {
+  try {
+    await requireAdmin();
+
+    if (ids.length === 0) {
+      return { success: true, count: 0 };
+    }
+
+    const result = await prisma.shipmentLog.updateMany({
+      where: { id: { in: ids }, isApproved: false },
+      data: { isApproved: true },
+    });
+
+    revalidatePath("/");
+    revalidatePath("/employee/profile");
+    revalidatePath("/admin/employees");
+
+    return { success: true, count: result.count };
+  } catch (error) {
+    console.error("[approveShipments]", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred while approving shipments.",
+    };
+  }
+}
 
 export async function toggleShipmentFlag(
   id: string

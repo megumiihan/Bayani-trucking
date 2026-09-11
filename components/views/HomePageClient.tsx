@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/context/RoleContext";
 import AdminMasterDashboard from "@/components/views/AdminMasterDashboard";
+import DashboardSkeleton from "@/components/admin/DashboardSkeleton";
 import type { Client } from "@/lib/clients";
 import type { Employee, Shipment } from "@/lib/mockData";
 import type { Truck } from "@/lib/trucks";
@@ -17,13 +18,7 @@ interface HomePageClientProps {
   routes: DestinationRouteRate[];
 }
 
-export default function HomePageClient({
-  initialShipments,
-  employees,
-  trucks,
-  clients,
-  routes,
-}: HomePageClientProps) {
+export default function HomePageClient(props: HomePageClientProps) {
   const { role } = useRole();
   const router = useRouter();
 
@@ -38,12 +33,14 @@ export default function HomePageClient({
   }
 
   return (
-    <AdminMasterDashboard
-      initialShipments={initialShipments}
-      employees={employees}
-      trucks={trucks}
-      lookupClients={clients}
-      routes={routes}
-    />
+    <Suspense fallback={<DashboardSkeleton />}>
+      <AdminMasterDashboard
+        initialShipments={props.initialShipments}
+        employees={props.employees}
+        trucks={props.trucks}
+        lookupClients={props.clients}
+        routes={props.routes}
+      />
+    </Suspense>
   );
 }

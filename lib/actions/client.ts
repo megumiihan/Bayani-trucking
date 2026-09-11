@@ -1,8 +1,10 @@
 "use server";
 
+import type { ClientRateHistoryKind } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { mapClientToUi } from "@/lib/mappers/client";
+import { mapClientRateHistoryToUi } from "@/lib/mappers/clientRateHistory";
 import { prisma } from "@/lib/prisma";
 import type { Client } from "@/lib/clients";
 
@@ -73,7 +75,7 @@ export async function updateLivestockRates(input: {
   pigheadHelperRate: number;
 }): Promise<ClientActionResult> {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
 
     const driverInvalid = parseRate(input.pigheadDriverRate, "Driver per-head rate");
     if (driverInvalid) return { success: false, error: driverInvalid };
@@ -82,19 +84,48 @@ export async function updateLivestockRates(input: {
 
     const existing = await prisma.client.findUnique({
       where: { id: input.id },
-      select: { id: true, calcType: true },
+      select: {
+        id: true,
+        calcType: true,
+        pigheadDriverRate: true,
+        pigheadHelperRate: true,
+      },
     });
     if (!existing) return { success: false, error: "Client not found." };
     if (existing.calcType !== "ANIMAL_HEADCOUNT") {
       return { success: false, error: "Only livestock clients have per-head rates." };
     }
 
-    const record = await prisma.client.update({
-      where: { id: input.id },
-      data: {
-        pigheadDriverRate: input.pigheadDriverRate,
-        pigheadHelperRate: input.pigheadHelperRate,
-      },
+    const unchanged =
+      existing.pigheadDriverRate === input.pigheadDriverRate &&
+      existing.pigheadHelperRate === input.pigheadHelperRate;
+
+    if (unchanged) {
+      return { success: false, error: "No rates were changed." };
+    }
+
+    const record = await prisma.$transaction(async (tx) => {
+      const updated = await tx.client.update({
+        where: { id: input.id },
+        data: {
+          pigheadDriverRate: input.pigheadDriverRate,
+          pigheadHelperRate: input.pigheadHelperRate,
+        },
+      });
+
+      await tx.clientRateHistory.create({
+        data: {
+          clientId: existing.id,
+          kind: "LIVESTOCK",
+          prevPigheadDriverRate: existing.pigheadDriverRate,
+          prevPigheadHelperRate: existing.pigheadHelperRate,
+          newPigheadDriverRate: input.pigheadDriverRate,
+          newPigheadHelperRate: input.pigheadHelperRate,
+          changedById: admin.id,
+        },
+      });
+
+      return updated;
     });
 
     revalidatePath("/admin/routes");
@@ -240,7 +271,7 @@ export async function updatePlatformRates(input: {
   platformHelperRate: number;
 }): Promise<ClientActionResult> {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
 
     const shareInvalid = parseFraction(input.platformShare, "Platform share");
     if (shareInvalid) return { success: false, error: shareInvalid };
@@ -251,20 +282,53 @@ export async function updatePlatformRates(input: {
 
     const existing = await prisma.client.findUnique({
       where: { id: input.id },
-      select: { id: true, calcType: true },
+      select: {
+        id: true,
+        calcType: true,
+        platformShare: true,
+        platformDriverRate: true,
+        platformHelperRate: true,
+      },
     });
     if (!existing) return { success: false, error: "Client not found." };
     if (existing.calcType !== "PLATFORM") {
       return { success: false, error: "Only platform clients have these rates." };
     }
 
-    const record = await prisma.client.update({
-      where: { id: input.id },
-      data: {
-        platformShare: input.platformShare,
-        platformDriverRate: input.platformDriverRate,
-        platformHelperRate: input.platformHelperRate,
-      },
+    const unchanged =
+      existing.platformShare === input.platformShare &&
+      existing.platformDriverRate === input.platformDriverRate &&
+      existing.platformHelperRate === input.platformHelperRate;
+
+    if (unchanged) {
+      return { success: false, error: "No rates were changed." };
+    }
+
+    const record = await prisma.$transaction(async (tx) => {
+      const updated = await tx.client.update({
+        where: { id: input.id },
+        data: {
+          platformShare: input.platformShare,
+          platformDriverRate: input.platformDriverRate,
+          platformHelperRate: input.platformHelperRate,
+        },
+      });
+
+      await tx.clientRateHistory.create({
+        data: {
+          clientId: existing.id,
+          kind: "PLATFORM",
+          prevPlatformShare: existing.platformShare,
+          prevPlatformDriverRate: existing.platformDriverRate,
+          prevPlatformHelperRate: existing.platformHelperRate,
+          newPlatformShare: input.platformShare,
+          newPlatformDriverRate: input.platformDriverRate,
+          newPlatformHelperRate: input.platformHelperRate,
+          changedById: admin.id,
+        },
+      });
+
+      return updated;
     });
 
     revalidatePath("/admin/routes");
@@ -280,6 +344,37 @@ export async function updatePlatformRates(input: {
         error instanceof Error
           ? error.message
           : "Could not update platform rates.",
+    };
+  }
+}
+
+export type ClientRateHistoryResult =
+  | { success: true; entries: ReturnType<typeof mapClientRateHistoryToUi>[] }
+  | { success: false; error: string };
+
+export async function fetchClientRateHistory(
+  clientId: string,
+  kind: ClientRateHistoryKind
+): Promise<ClientRateHistoryResult> {
+  try {
+    await requireAdmin();
+
+    const records = await prisma.clientRateHistory.findMany({
+      where: { clientId, kind },
+      orderBy: { changedAt: "desc" },
+      take: 100,
+      include: { changedBy: { select: { email: true } } },
+    });
+
+    return { success: true, entries: records.map(mapClientRateHistoryToUi) };
+  } catch (error) {
+    console.error("[fetchClientRateHistory]", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Could not load rate history.",
     };
   }
 }

@@ -8,6 +8,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
+import { inputClass } from "@/components/ui/formStyles";
 
 interface SearchableSelectProps {
   options: string[];
@@ -16,6 +17,8 @@ interface SearchableSelectProps {
   placeholder?: string;
   required?: boolean;
   id?: string;
+  name?: string;
+  "aria-label"?: string;
 }
 
 export default function SearchableSelect({
@@ -25,9 +28,12 @@ export default function SearchableSelect({
   placeholder = "Type to search…",
   required = false,
   id,
+  name,
+  "aria-label": ariaLabel,
 }: SearchableSelectProps) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
+  const listboxId = `${inputId}-listbox`;
   const containerRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState(value);
   const [open, setOpen] = useState(false);
@@ -68,6 +74,11 @@ export default function SearchableSelect({
     setOpen(false);
   };
 
+  const activeOptionId =
+    open && filteredOptions[highlightIndex]
+      ? `${inputId}-option-${highlightIndex}`
+      : undefined;
+
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (!open && (event.key === "ArrowDown" || event.key === "Enter")) {
       setOpen(true);
@@ -98,11 +109,14 @@ export default function SearchableSelect({
     <div ref={containerRef} className="relative">
       <input
         id={inputId}
+        name={name}
         type="text"
         role="combobox"
         aria-expanded={open}
         aria-autocomplete="list"
-        aria-controls={`${inputId}-listbox`}
+        aria-controls={listboxId}
+        aria-activedescendant={activeOptionId}
+        aria-label={ariaLabel}
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -120,11 +134,10 @@ export default function SearchableSelect({
         className={inputClass}
       />
 
-      {/* Hidden input for native required validation */}
       {required && (
         <input
           tabIndex={-1}
-          aria-hidden
+          aria-hidden="true"
           value={value}
           onChange={() => {}}
           required
@@ -134,9 +147,9 @@ export default function SearchableSelect({
 
       {open && (
         <ul
-          id={`${inputId}-listbox`}
+          id={listboxId}
           role="listbox"
-          className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+          className="absolute z-20 mt-1 max-h-60 w-full overflow-auto overscroll-contain rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
         >
           {filteredOptions.length === 0 ? (
             <li className="px-3 py-2 text-sm text-gray-500">No matching routes</li>
@@ -144,6 +157,7 @@ export default function SearchableSelect({
             filteredOptions.map((option, index) => (
               <li
                 key={option}
+                id={`${inputId}-option-${index}`}
                 role="option"
                 aria-selected={value === option}
                 onMouseDown={(e) => {
@@ -168,6 +182,3 @@ export default function SearchableSelect({
     </div>
   );
 }
-
-const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20";

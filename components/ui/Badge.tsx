@@ -3,10 +3,10 @@ interface BadgeProps {
   className?: string;
 }
 
-export default function Badge({ label, className = "bg-gray-100 text-gray-700" }: BadgeProps) {
+export default function Badge({ label, className = "bg-slate-100 text-slate-700" }: BadgeProps) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${className}`}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold leading-5 ${className}`}
     >
       {label}
     </span>

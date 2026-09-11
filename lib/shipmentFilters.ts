@@ -7,7 +7,7 @@ export type DateDuration =
   | "this-month"
   | "custom";
 
-export type StatusFilter = "all" | "flagged" | "approved";
+export type StatusFilter = "all" | "flagged" | "approved" | "pending";
 
 export type ExtraHelperFilter = "all" | "with-notes";
 
@@ -137,6 +137,7 @@ export function filterShipments(
 
     if (filters.status === "flagged" && !shipment.flagged) return false;
     if (filters.status === "approved" && !shipment.approved) return false;
+    if (filters.status === "pending" && shipment.approved) return false;
 
     if (!matchesSearch(shipment, filters.search)) return false;
 
@@ -146,4 +147,148 @@ export function filterShipments(
 
 export function getUniqueClients(shipments: Shipment[]): string[] {
   return Array.from(new Set(shipments.map((shipment) => shipment.client))).sort();
+}
+
+const DATE_DURATIONS: DateDuration[] = [
+  "all",
+  "today",
+  "this-week",
+  "this-month",
+  "custom",
+];
+const STATUS_FILTERS: StatusFilter[] = ["all", "flagged", "approved", "pending"];
+const EXTRA_HELPER_FILTERS: ExtraHelperFilter[] = ["all", "with-notes"];
+
+function parseEnum<T extends string>(
+  value: string | null,
+  allowed: readonly T[],
+  fallback: T
+): T {
+  if (value && (allowed as readonly string[]).includes(value)) {
+    return value as T;
+  }
+  return fallback;
+}
+
+export function parseFiltersFromSearchParams(
+  params: Pick<URLSearchParams, "get">
+): ShipmentFilters {
+  return {
+    search: params.get("q") ?? "",
+    client: params.get("client") ?? "all",
+    dateDuration: parseEnum(params.get("duration"), DATE_DURATIONS, "all"),
+    customStartDate: params.get("from") ?? "",
+    customEndDate: params.get("to") ?? "",
+    extraHelper: parseEnum(params.get("extraHelper"), EXTRA_HELPER_FILTERS, "all"),
+    status: parseEnum(params.get("status"), STATUS_FILTERS, "all"),
+  };
+}
+
+export function filtersToSearchParams(
+  filters: ShipmentFilters
+): URLSearchParams {
+  const params = new URLSearchParams();
+
+  if (filters.search.trim()) params.set("q", filters.search.trim());
+  if (filters.client !== "all") params.set("client", filters.client);
+  if (filters.dateDuration !== "all") params.set("duration", filters.dateDuration);
+  if (filters.customStartDate) params.set("from", filters.customStartDate);
+  if (filters.customEndDate) params.set("to", filters.customEndDate);
+  if (filters.extraHelper !== "all") params.set("extraHelper", filters.extraHelper);
+  if (filters.status !== "all") params.set("status", filters.status);
+
+  return params;
+}
+
+const DATE_DURATION_LABELS: Record<DateDuration, string> = {
+  all: "All Time",
+  today: "Today",
+  "this-week": "This Week",
+  "this-month": "This Month",
+  custom: "Custom Range",
+};
+
+const STATUS_LABELS: Record<StatusFilter, string> = {
+  all: "All",
+  flagged: "Flagged",
+  approved: "Approved",
+  pending: "Pending approval",
+};
+
+export function hasActiveFilters(filters: ShipmentFilters): boolean {
+  return (
+    filters.search.trim() !== "" ||
+    filters.client !== "all" ||
+    filters.dateDuration !== "all" ||
+    filters.extraHelper !== "all" ||
+    filters.status !== "all"
+  );
+}
+
+export interface ActiveFilterChip {
+  id: string;
+  label: string;
+  onRemove: () => void;
+}
+
+export function getActiveFilterChips(
+  filters: ShipmentFilters,
+  onChange: (filters: ShipmentFilters) => void
+): ActiveFilterChip[] {
+  const chips: ActiveFilterChip[] = [];
+
+  if (filters.search.trim()) {
+    chips.push({
+      id: "search",
+      label: `Search: ${filters.search.trim()}`,
+      onRemove: () => onChange({ ...filters, search: "" }),
+    });
+  }
+
+  if (filters.client !== "all") {
+    chips.push({
+      id: "client",
+      label: `Client: ${filters.client}`,
+      onRemove: () => onChange({ ...filters, client: "all" }),
+    });
+  }
+
+  if (filters.dateDuration !== "all") {
+    const durationLabel = DATE_DURATION_LABELS[filters.dateDuration];
+    const rangeLabel =
+      filters.dateDuration === "custom" &&
+      (filters.customStartDate || filters.customEndDate)
+        ? `${durationLabel} (${filters.customStartDate || "…"} – ${filters.customEndDate || "…"})`
+        : durationLabel;
+
+    chips.push({
+      id: "duration",
+      label: `Date: ${rangeLabel}`,
+      onRemove: () =>
+        onChange({
+          ...filters,
+          dateDuration: "all",
+          customStartDate: "",
+          customEndDate: "",
+        }),
+    });
+  }
+
+  if (filters.extraHelper !== "all") {
+    chips.push({
+      id: "extraHelper",
+      label: "With extra helper notes",
+      onRemove: () => onChange({ ...filters, extraHelper: "all" }),
+    });
+  }
+
+  if (filters.status !== "all") {
+    chips.push({
+      id: "status",
+      label: STATUS_LABELS[filters.status],
+      onRemove: () => onChange({ ...filters, status: "all" }),
+    });
+  }
+
+  return chips;
 }
