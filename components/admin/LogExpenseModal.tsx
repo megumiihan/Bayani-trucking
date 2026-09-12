@@ -11,6 +11,7 @@ import {
 } from "@/lib/expenses";
 import type { Employee } from "@/lib/mockData";
 import { formatTruckLabel, type Truck } from "@/lib/trucks";
+import { useEscapeToClose } from "@/components/ui/useEscapeToClose";
 
 interface LogExpenseModalProps {
   isOpen: boolean;
@@ -91,6 +92,8 @@ export default function LogExpenseModal({
   }, [trucks, truckId]);
 
   const showTruckField = expenseAllowsTruck(category);
+
+  useEscapeToClose(isOpen, onClose, isSaving);
 
   if (!isOpen) return null;
 

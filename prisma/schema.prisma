@@ -50,11 +50,14 @@ model Profile {
   employee   Employee? @relation(fields: [employeeId], references: [id])
   createdAt  DateTime  @default(now())
 
-  createdShipments ShipmentLog[]
-  recordedPayments SalaryPayment[]
-  loggedExpenses   Expense[]
-  rateChanges       DestinationRateHistory[]
-  clientRateChanges ClientRateHistory[]
+  createdShipments           ShipmentLog[]
+  recordedPayments           SalaryPayment[]
+  loggedExpenses             Expense[]
+  loggedBillables            Billable[]
+  loggedDisbursements        Disbursement[]
+  loggedCollectionReceipts   CollectionReceipt[]
+  rateChanges                DestinationRateHistory[]
+  clientRateChanges          ClientRateHistory[]
 }
 
 enum AppRole {
@@ -98,6 +101,7 @@ model Client {
   shipments        ShipmentLog[]
   rateHistory      DestinationRateHistory[]
   clientRateHistory ClientRateHistory[]
+  billables        Billable[]
 }
 
 enum CalculationType {
@@ -271,4 +275,55 @@ model Expense {
   createdById String
   createdBy   Profile         @relation(fields: [createdById], references: [id])
   createdAt   DateTime        @default(now())
+}
+
+// 8. BOOKKEEPING LEDGERS
+model Billable {
+  id                      String   @id @default(uuid())
+  date                    DateTime
+  invoiceNo               String   @unique
+  vatRegNo                String
+  buyerName               String   @default("")
+  buyerAddress            String   @default("")
+  clientId                String?
+  client                  Client?  @relation(fields: [clientId], references: [id])
+  totalInvoiceAmt         Float    @default(0)
+  taxableAmt              Float
+  outputTax               Float    @default(0)
+  withholdingTax          Float    @default(0)
+  vatDeduction            Boolean  @default(true)
+  withholdingTaxDeduction Boolean  @default(false)
+  createdById             String
+  createdBy               Profile  @relation(fields: [createdById], references: [id])
+  createdAt               DateTime @default(now())
+
+  @@index([date(sort: Desc)])
+}
+
+model Disbursement {
+  id          String   @id @default(uuid())
+  date        DateTime
+  payee       String
+  amount      Float
+  referenceNo String?
+  description String?
+  createdById String
+  createdBy   Profile  @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([date(sort: Desc)])
+}
+
+model CollectionReceipt {
+  id           String   @id @default(uuid())
+  date         DateTime
+  receivedFrom String
+  amount       Float
+  receiptNo    String   @unique
+  description  String?
+  createdById  String
+  createdBy    Profile  @relation(fields: [createdById], references: [id])
+  createdAt    DateTime @default(now())
+
+  @@index([date(sort: Desc)])
 }

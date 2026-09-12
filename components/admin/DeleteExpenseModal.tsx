@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { expenseCategoryLabel, type ExpenseUi } from "@/lib/expenses";
 import { formatCurrency } from "@/lib/mockData";
+import { useEscapeToClose } from "@/components/ui/useEscapeToClose";
 
 interface DeleteExpenseModalProps {
   expense: ExpenseUi | null;
@@ -26,6 +27,8 @@ export default function DeleteExpenseModal({
     setStep("preview");
     setTypedDate("");
   }, [expense?.id]);
+
+  useEscapeToClose(Boolean(expense), onClose, isDeleting);
 
   if (!expense) return null;
 

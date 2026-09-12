@@ -1,43 +1,43 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { formatCurrency } from "@/lib/mockData";
+import type { DisbursementWriteInput } from "@/lib/bookkeeping";
+import { inputClass } from "@/components/ui/formStyles";
 import { useEscapeToClose } from "@/components/ui/useEscapeToClose";
 
-interface RecordPayoutModalProps {
-  employeeName: string;
-  balanceDue: number;
+interface LogDisbursementModalProps {
   isOpen: boolean;
   isSaving: boolean;
   error: string | null;
   onClose: () => void;
-  onSave: (amount: number, paidAt: string, note: string) => Promise<void>;
+  onSave: (input: DisbursementWriteInput) => Promise<void>;
 }
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function RecordPayoutModal({
-  employeeName,
-  balanceDue,
+export default function LogDisbursementModal({
   isOpen,
   isSaving,
   error,
   onClose,
   onSave,
-}: RecordPayoutModalProps) {
+}: LogDisbursementModalProps) {
+  const [date, setDate] = useState(todayISO);
+  const [payee, setPayee] = useState("");
   const [amount, setAmount] = useState("");
-  const [paidAt, setPaidAt] = useState(todayISO);
-  const [note, setNote] = useState("");
+  const [referenceNo, setReferenceNo] = useState("");
+  const [description, setDescription] = useState("");
 
   useEffect(() => {
-    if (isOpen) {
-      setAmount(balanceDue > 0 ? String(balanceDue) : "");
-      setPaidAt(todayISO());
-      setNote("");
-    }
-  }, [isOpen, balanceDue]);
+    if (!isOpen) return;
+    setDate(todayISO());
+    setPayee("");
+    setAmount("");
+    setReferenceNo("");
+    setDescription("");
+  }, [isOpen]);
 
   useEscapeToClose(isOpen, onClose, isSaving);
 
@@ -48,7 +48,13 @@ export default function RecordPayoutModal({
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (isSaving || !Number.isFinite(parsedAmount) || parsedAmount <= 0) return;
-    await onSave(parsedAmount, paidAt, note);
+    await onSave({
+      date,
+      payee,
+      amount: parsedAmount,
+      referenceNo,
+      description,
+    });
   };
 
   return (
@@ -61,33 +67,49 @@ export default function RecordPayoutModal({
       />
       <div
         role="dialog"
-        aria-labelledby="record-payout-title"
-        className="relative w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-xl"
+        aria-labelledby="log-disbursement-title"
+        className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-gray-200 bg-white p-6 shadow-xl"
       >
         <h2
-          id="record-payout-title"
+          id="log-disbursement-title"
           className="text-lg font-semibold text-gray-900"
         >
-          Record payout
+          Log disbursement
         </h2>
         <p className="mt-1 text-sm text-gray-500">
-          Log cash paid to {employeeName}. This does not delete shipment
-          earnings — it adds a payment row to the ledger.
+          Record money paid out. Reference number and description are optional.
         </p>
-
-        <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 text-sm">
-          <p className="text-xs font-medium uppercase tracking-wider text-gray-500">
-            Balance due
-          </p>
-          <p className="mt-1 text-xl font-bold text-gray-900">
-            {formatCurrency(balanceDue)}
-          </p>
-        </div>
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-gray-700">
-              Amount paid
+              Date
+            </span>
+            <input
+              type="date"
+              required
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">
+              Payee
+            </span>
+            <input
+              type="text"
+              required
+              value={payee}
+              onChange={(e) => setPayee(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">
+              Amount
             </span>
             <input
               type="number"
@@ -97,33 +119,33 @@ export default function RecordPayoutModal({
               required
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              className={inputClass}
             />
           </label>
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-gray-700">
-              Date paid
-            </span>
-            <input
-              type="date"
-              required
-              value={paidAt}
-              onChange={(e) => setPaidAt(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            />
-          </label>
-
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-gray-700">
-              Note
+              Reference no.
+              <span className="ml-1 font-normal text-gray-400">(optional)</span>
             </span>
             <input
               type="text"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Optional — e.g. Paid via Gcash by Kirsten"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              value={referenceNo}
+              onChange={(e) => setReferenceNo(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">
+              Description
+              <span className="ml-1 font-normal text-gray-400">(optional)</span>
+            </span>
+            <textarea
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className={inputClass}
             />
           </label>
 
@@ -147,10 +169,12 @@ export default function RecordPayoutModal({
             </button>
             <button
               type="submit"
-              disabled={isSaving || !Number.isFinite(parsedAmount) || parsedAmount <= 0}
+              disabled={
+                isSaving || !Number.isFinite(parsedAmount) || parsedAmount <= 0
+              }
               className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-gray-300"
             >
-              {isSaving ? "Saving…" : "Save payout"}
+              {isSaving ? "Saving…" : "Save disbursement"}
             </button>
           </div>
         </form>

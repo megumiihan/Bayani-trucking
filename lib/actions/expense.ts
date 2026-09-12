@@ -85,6 +85,7 @@ export async function saveExpense(
     });
 
     revalidatePath("/admin/expenses");
+    revalidatePath("/admin/bookkeeping");
 
     return { success: true, expense: mapExpenseToUi(record) };
   } catch (error) {
@@ -125,6 +126,7 @@ export async function updateExpense(
     });
 
     revalidatePath("/admin/expenses");
+    revalidatePath("/admin/bookkeeping");
 
     return { success: true, expense: mapExpenseToUi(record) };
   } catch (error) {
@@ -165,6 +167,7 @@ export async function toggleExpenseFlag(
     });
 
     revalidatePath("/admin/expenses");
+    revalidatePath("/admin/bookkeeping");
 
     return { success: true, expense: mapExpenseToUi(updated) };
   } catch (error) {
@@ -195,6 +198,7 @@ export async function deleteExpense(id: string): Promise<DeleteExpenseResult> {
 
     await prisma.expense.delete({ where: { id } });
     revalidatePath("/admin/expenses");
+    revalidatePath("/admin/bookkeeping");
     return { success: true };
   } catch (error) {
     console.error("[deleteExpense]", error);

@@ -100,6 +100,8 @@ export default function SearchableSelect({
       const option = filteredOptions[highlightIndex];
       if (option) selectOption(option);
     } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
       setOpen(false);
       setQuery(value);
     }

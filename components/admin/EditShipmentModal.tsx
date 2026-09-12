@@ -19,6 +19,7 @@ import {
 import type { UpdateShipmentInput } from "@/lib/actions/shipment";
 import SearchableSelect from "@/components/ui/SearchableSelect";
 import { inputClass } from "@/components/ui/formStyles";
+import { useEscapeToClose } from "@/components/ui/useEscapeToClose";
 
 interface EditShipmentModalProps {
   shipment: Shipment | null;
@@ -124,6 +125,8 @@ export default function EditShipmentModal({
     () => trucks.filter((truck) => truck.isActive),
     [trucks]
   );
+
+  useEscapeToClose(Boolean(shipment), onClose, isSaving);
 
   if (!shipment || !form) return null;
 

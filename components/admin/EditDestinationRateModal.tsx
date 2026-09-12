@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import type { DestinationRouteRate } from "@/lib/rates";
 import { formatCurrency } from "@/lib/mockData";
 import { inputClass } from "@/components/ui/formStyles";
+import { useEscapeToClose } from "@/components/ui/useEscapeToClose";
 
 interface EditDestinationRateModalProps {
   rate: DestinationRouteRate | null;
@@ -34,6 +35,8 @@ export default function EditDestinationRateModal({
     setHelperRate(String(rate.helperBaseRate));
     setExtraHelperRate(String(rate.extraHelperBaseRate));
   }, [rate]);
+
+  useEscapeToClose(Boolean(rate), onClose, isSaving);
 
   if (!rate) return null;
 

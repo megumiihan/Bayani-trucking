@@ -1,39 +1,38 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Shipment } from "@/lib/mockData";
-import { inputClassDanger } from "@/components/ui/formStyles";
+import type { BillableUi } from "@/lib/bookkeeping";
+import { formatCurrency } from "@/lib/mockData";
 import { useEscapeToClose } from "@/components/ui/useEscapeToClose";
 
-interface DeleteShipmentModalProps {
-  shipment: Shipment | null;
+interface DeleteBillableModalProps {
+  billable: BillableUi | null;
   isDeleting: boolean;
   error: string | null;
   onClose: () => void;
   onConfirm: (id: string) => void;
 }
 
-export default function DeleteShipmentModal({
-  shipment,
+export default function DeleteBillableModal({
+  billable,
   isDeleting,
   error,
   onClose,
   onConfirm,
-}: DeleteShipmentModalProps) {
+}: DeleteBillableModalProps) {
   const [step, setStep] = useState<"preview" | "confirm">("preview");
-  const [typedNumber, setTypedNumber] = useState("");
+  const [typedInvoice, setTypedInvoice] = useState("");
 
   useEffect(() => {
     setStep("preview");
-    setTypedNumber("");
-  }, [shipment?.id]);
+    setTypedInvoice("");
+  }, [billable?.id]);
 
-  useEscapeToClose(Boolean(shipment), onClose, isDeleting);
+  useEscapeToClose(Boolean(billable), onClose, isDeleting);
 
-  if (!shipment) return null;
+  if (!billable) return null;
 
-  const numberMatches =
-    typedNumber.trim().toLowerCase() === shipment.shipmentNumber.toLowerCase();
+  const invoiceMatches = typedInvoice.trim() === billable.invoiceNo;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -45,62 +44,46 @@ export default function DeleteShipmentModal({
       />
       <div
         role="dialog"
-        aria-labelledby="delete-shipment-title"
-        aria-modal="true"
-        className="relative w-full max-w-lg overscroll-contain rounded-xl border border-gray-200 bg-white p-6 shadow-xl"
+        aria-labelledby="delete-billable-title"
+        className="relative w-full max-w-lg rounded-xl border border-gray-200 bg-white p-6 shadow-xl"
       >
         <h2
-          id="delete-shipment-title"
+          id="delete-billable-title"
           className="text-lg font-semibold text-gray-900"
         >
-          {step === "preview" ? "Delete this shipment?" : "Confirm permanent delete"}
+          {step === "preview"
+            ? "Delete this billable?"
+            : "Confirm permanent delete"}
         </h2>
         <p className="mt-1 text-sm text-gray-500">
           {step === "preview"
-            ? "Review the log below. Nothing has been deleted yet."
-            : "This cannot be undone. Earnings for this trip will disappear from driver and helper totals."}
+            ? "Review the entry below. Nothing has been deleted yet."
+            : "This cannot be undone. The row will disappear from the billables table and CSV exports."}
         </p>
 
         <dl className="mt-5 space-y-2 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm">
-          <PreviewRow label="Date" value={shipment.date} />
-          <PreviewRow label="Shipment #" value={shipment.shipmentNumber} />
-          <PreviewRow label="Waybill" value={shipment.waybillNumber || "—"} />
-          <PreviewRow label="Client" value={shipment.client} />
-          <PreviewRow label="Route" value={shipment.farthestRoute || "—"} />
+          <PreviewRow label="Date" value={billable.date} />
+          <PreviewRow label="Invoice no." value={billable.invoiceNo} />
+          <PreviewRow label="Buyer" value={billable.buyerName || "—"} />
+          <PreviewRow label="Address" value={billable.buyerAddress || "—"} />
           <PreviewRow
-            label="Pig heads"
-            value={
-              shipment.pigheadCount != null ? String(shipment.pigheadCount) : "—"
-            }
+            label="Total invoice"
+            value={formatCurrency(billable.invoiceTotal)}
           />
-          <PreviewRow
-            label="Platform rate"
-            value={
-              shipment.platformRate != null ? String(shipment.platformRate) : "—"
-            }
-          />
-          <PreviewRow
-            label="KG"
-            value={shipment.weightKg != null ? String(shipment.weightKg) : "—"}
-          />
-          <PreviewRow label="Driver" value={shipment.driver} />
-          <PreviewRow label="Helper" value={shipment.helper || "—"} />
         </dl>
 
         {step === "confirm" && (
           <label className="mt-4 block">
             <span className="mb-1.5 block text-sm font-medium text-gray-700">
-              Type the shipment number to confirm
+              Type the invoice no. to confirm
             </span>
             <input
               type="text"
-              name="confirmShipmentNumber"
               autoComplete="off"
-              spellCheck={false}
-              value={typedNumber}
-              onChange={(e) => setTypedNumber(e.target.value)}
-              placeholder={`e.g. ${shipment.shipmentNumber}`}
-              className={inputClassDanger}
+              value={typedInvoice}
+              onChange={(e) => setTypedInvoice(e.target.value)}
+              placeholder={billable.invoiceNo}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20"
             />
           </label>
         )}
@@ -108,7 +91,6 @@ export default function DeleteShipmentModal({
         {error && (
           <p
             role="alert"
-            aria-live="polite"
             className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
           >
             {error}
@@ -135,8 +117,8 @@ export default function DeleteShipmentModal({
           ) : (
             <button
               type="button"
-              disabled={!numberMatches || isDeleting}
-              onClick={() => onConfirm(shipment.id)}
+              disabled={!invoiceMatches || isDeleting}
+              onClick={() => onConfirm(billable.id)}
               className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:bg-gray-300"
             >
               {isDeleting ? "Deleting…" : "Delete permanently"}
@@ -152,7 +134,7 @@ function PreviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4">
       <dt className="text-red-800/70">{label}</dt>
-      <dd className="font-medium text-red-950">{value}</dd>
+      <dd className="text-right font-medium text-red-950">{value}</dd>
     </div>
   );
 }

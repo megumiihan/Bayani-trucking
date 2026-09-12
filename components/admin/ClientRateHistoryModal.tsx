@@ -6,6 +6,7 @@ import { fetchClientRateHistory } from "@/lib/actions/client";
 import type { ClientRateHistoryEntry } from "@/lib/mappers/clientRateHistory";
 import { formatCurrency } from "@/lib/mockData";
 import { fractionToPercentInput } from "@/lib/platform";
+import { useEscapeToClose } from "@/components/ui/useEscapeToClose";
 
 interface ClientRateHistoryModalProps {
   clientId: string | null;
@@ -61,6 +62,8 @@ export default function ClientRateHistoryModal({
       cancelled = true;
     };
   }, [open, clientId, kind]);
+
+  useEscapeToClose(open, onClose);
 
   if (!open) return null;
 

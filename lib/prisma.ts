@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 
-const CLIENT_REV = 15;
+const CLIENT_REV = 19;
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -48,7 +48,8 @@ const reusable =
   cached &&
   globalForPrisma.prismaRev === CLIENT_REV &&
   "salaryPayment" in cached &&
-  "expense" in cached
+  "expense" in cached &&
+  "billable" in cached
     ? cached
     : undefined;
 

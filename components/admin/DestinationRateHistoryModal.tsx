@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { fetchDestinationRateHistory } from "@/lib/actions/route";
 import type { DestinationRateHistoryEntry } from "@/lib/mappers/routeHistory";
 import { formatCurrency } from "@/lib/mockData";
+import { useEscapeToClose } from "@/components/ui/useEscapeToClose";
 
 interface DestinationRateHistoryModalProps {
   clientId: string | null;
@@ -52,6 +53,8 @@ export default function DestinationRateHistoryModal({
       cancelled = true;
     };
   }, [open, clientId]);
+
+  useEscapeToClose(open, onClose);
 
   if (!open) return null;
 
