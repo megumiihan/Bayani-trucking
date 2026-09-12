@@ -5,12 +5,15 @@ import type { ExpenseCategory } from "@prisma/client";
 import {
   EXPENSE_CATEGORIES,
   EXPENSE_CATEGORY_LABELS,
+  computeExpenseVat,
   expenseAllowsTruck,
   type ExpenseUi,
   type ExpenseWriteInput,
 } from "@/lib/expenses";
 import type { Employee } from "@/lib/mockData";
+import { formatCurrency } from "@/lib/mockData";
 import { formatTruckLabel, type Truck } from "@/lib/trucks";
+import { inputClass } from "@/components/ui/formStyles";
 import { useEscapeToClose } from "@/components/ui/useEscapeToClose";
 
 interface LogExpenseModalProps {
@@ -42,6 +45,9 @@ export default function LogExpenseModal({
   const [date, setDate] = useState(todayISO);
   const [category, setCategory] = useState<ExpenseCategory>("FUEL");
   const [amount, setAmount] = useState("");
+  const [address, setAddress] = useState("");
+  const [invoiceNo, setInvoiceNo] = useState("");
+  const [vatRegNo, setVatRegNo] = useState("");
   const [description, setDescription] = useState("");
   const [employeeId, setEmployeeId] = useState("");
   const [truckId, setTruckId] = useState("");
@@ -55,6 +61,9 @@ export default function LogExpenseModal({
       setDate(expense.date);
       setCategory(expense.category);
       setAmount(String(expense.amount));
+      setAddress(expense.address);
+      setInvoiceNo(expense.invoiceNo);
+      setVatRegNo(expense.vatRegNo);
       setDescription(expense.description);
       setEmployeeId(expense.employeeId ?? "");
       setTruckId(expense.truckId ?? "");
@@ -66,6 +75,9 @@ export default function LogExpenseModal({
     setDate(todayISO());
     setCategory("FUEL");
     setAmount("");
+    setAddress("");
+    setInvoiceNo("");
+    setVatRegNo("");
     setDescription("");
     setEmployeeId("");
     setTruckId("");
@@ -92,12 +104,13 @@ export default function LogExpenseModal({
   }, [trucks, truckId]);
 
   const showTruckField = expenseAllowsTruck(category);
+  const parsedAmount = Number(amount);
+  const hasValidAmount = Number.isFinite(parsedAmount) && parsedAmount > 0;
+  const vatPreview = hasValidAmount ? computeExpenseVat(parsedAmount) : null;
 
   useEscapeToClose(isOpen, onClose, isSaving);
 
   if (!isOpen) return null;
-
-  const parsedAmount = Number(amount);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -106,6 +119,9 @@ export default function LogExpenseModal({
       date,
       category,
       amount: parsedAmount,
+      address,
+      invoiceNo,
+      vatRegNo,
       description,
       employeeId: employeeId || null,
       truckId: showTruckField ? truckId || null : null,
@@ -174,7 +190,7 @@ export default function LogExpenseModal({
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-gray-700">
-              Amount
+              Total invoice amount
             </span>
             <input
               type="number"
@@ -187,6 +203,73 @@ export default function LogExpenseModal({
               className={inputClass}
             />
           </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">
+              Name and address
+            </span>
+            <textarea
+              rows={2}
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">
+              Invoice no.
+            </span>
+            <input
+              type="text"
+              value={invoiceNo}
+              onChange={(e) => setInvoiceNo(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">
+              VAT Reg. No.
+            </span>
+            <input
+              type="text"
+              value={vatRegNo}
+              onChange={(e) => setVatRegNo(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+
+          <div
+            aria-live="polite"
+            className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Preview
+            </p>
+            <dl className="mt-2 space-y-1.5 text-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <dt className="text-slate-600">VAT purchase</dt>
+                  <p className="text-xs text-slate-400">
+                    Total invoice amount ÷ 1.12
+                  </p>
+                </div>
+                <dd className="tabular-nums text-slate-800">
+                  {vatPreview ? formatCurrency(vatPreview.vatPurchase) : "—"}
+                </dd>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <dt className="font-semibold text-slate-900">Input tax</dt>
+                  <p className="text-xs text-slate-400">VAT purchase × 1.12</p>
+                </div>
+                <dd className="tabular-nums font-semibold text-slate-900">
+                  {vatPreview ? formatCurrency(vatPreview.inputTax) : "—"}
+                </dd>
+              </div>
+            </dl>
+          </div>
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-gray-700">
@@ -295,6 +378,3 @@ export default function LogExpenseModal({
     </div>
   );
 }
-
-const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20";

@@ -1,4 +1,8 @@
 import type { ExpenseCategory } from "@prisma/client";
+import {
+  VAT_INCLUSIVE_DIVISOR,
+  roundMoney,
+} from "@/lib/bookkeeping";
 
 export const EXPENSE_CATEGORIES = [
   "SALARY",
@@ -22,11 +26,22 @@ export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   OTHERS: "Others",
 };
 
+export function computeExpenseVat(amount: number) {
+  const vatPurchase = roundMoney(amount / VAT_INCLUSIVE_DIVISOR);
+  const inputTax = roundMoney(vatPurchase * VAT_INCLUSIVE_DIVISOR);
+  return { vatPurchase, inputTax };
+}
+
 export type ExpenseUi = {
   id: string;
   date: string;
   category: ExpenseCategory;
   amount: number;
+  address: string;
+  invoiceNo: string;
+  vatRegNo: string;
+  vatPurchase: number;
+  inputTax: number;
   description: string;
   flagged: boolean;
   reimbursed: boolean;
@@ -42,6 +57,9 @@ export type ExpenseWriteInput = {
   date: string;
   category: ExpenseCategory;
   amount: number;
+  address?: string;
+  invoiceNo?: string;
+  vatRegNo?: string;
   description?: string;
   employeeId?: string | null;
   truckId?: string | null;

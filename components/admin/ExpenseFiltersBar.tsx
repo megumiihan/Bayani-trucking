@@ -1,12 +1,13 @@
 "use client";
 
+import type { ExpenseCategory } from "@prisma/client";
 import {
   EXPENSE_CATEGORIES,
   EXPENSE_CATEGORY_LABELS,
 } from "@/lib/expenses";
 import type { ExpenseFilters } from "@/lib/expenseFilters";
 import type { DateDuration } from "@/lib/shipmentFilters";
-import type { ExpenseCategory } from "@prisma/client";
+import { inputClass } from "@/components/ui/formStyles";
 
 interface ExpenseFiltersBarProps {
   filters: ExpenseFilters;
@@ -25,10 +26,10 @@ export default function ExpenseFiltersBar({
   };
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <label>
-          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-gray-500">
+          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
             Category
           </span>
           <select
@@ -48,7 +49,7 @@ export default function ExpenseFiltersBar({
         </label>
 
         <label>
-          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-gray-500">
+          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
             Date
           </span>
           <select
@@ -66,23 +67,71 @@ export default function ExpenseFiltersBar({
           </select>
         </label>
 
-        <label className="flex items-end pb-2">
-          <span className="flex items-center gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={filters.flaggedOnly}
-              onChange={(e) => update("flaggedOnly", e.target.checked)}
-              className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-            />
-            Flagged only
+        <label>
+          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
+            Name and address
           </span>
+          <input
+            type="search"
+            value={filters.nameAndAddress}
+            onChange={(e) => update("nameAndAddress", e.target.value)}
+            className={inputClass}
+          />
+        </label>
+
+        <label>
+          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
+            Invoice no.
+          </span>
+          <input
+            type="search"
+            value={filters.invoiceNo}
+            onChange={(e) => update("invoiceNo", e.target.value)}
+            className={inputClass}
+          />
+        </label>
+
+        <label>
+          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
+            VAT Reg. No.
+          </span>
+          <input
+            type="search"
+            value={filters.vatRegNo}
+            onChange={(e) => update("vatRegNo", e.target.value)}
+            className={inputClass}
+          />
+        </label>
+
+        <label>
+          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
+            Description
+          </span>
+          <input
+            type="search"
+            value={filters.description}
+            onChange={(e) => update("description", e.target.value)}
+            className={inputClass}
+          />
+        </label>
+
+        <label>
+          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
+            Logged by
+          </span>
+          <input
+            type="search"
+            value={filters.loggedBy}
+            onChange={(e) => update("loggedBy", e.target.value)}
+            className={inputClass}
+          />
         </label>
       </div>
 
       {filters.dateDuration === "custom" && (
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:max-w-md">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label>
-            <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-gray-500">
+            <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
               Start date
             </span>
             <input
@@ -93,7 +142,7 @@ export default function ExpenseFiltersBar({
             />
           </label>
           <label>
-            <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-gray-500">
+            <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
               End date
             </span>
             <input
@@ -108,6 +157,3 @@ export default function ExpenseFiltersBar({
     </div>
   );
 }
-
-const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20";

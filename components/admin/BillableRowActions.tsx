@@ -5,6 +5,8 @@ import type { ReactNode } from "react";
 interface BillableRowActionsProps {
   onEdit: () => void;
   onDelete: () => void;
+  editLabel?: string;
+  deleteLabel?: string;
 }
 
 const baseButton =
@@ -13,18 +15,20 @@ const baseButton =
 export default function BillableRowActions({
   onEdit,
   onDelete,
+  editLabel = "Edit billable",
+  deleteLabel = "Delete billable",
 }: BillableRowActionsProps) {
   return (
     <div className="flex items-center gap-1">
       <ActionIconButton
-        label="Edit billable"
+        label={editLabel}
         onClick={onEdit}
         className={`${baseButton} border-slate-200/80 text-slate-400 hover:border-blue-200 hover:bg-blue-50/60 hover:text-blue-600 focus-visible:ring-blue-300`}
       >
         <PencilIcon />
       </ActionIconButton>
       <ActionIconButton
-        label="Delete billable"
+        label={deleteLabel}
         onClick={onDelete}
         className={`${baseButton} border-slate-200/80 text-slate-400 hover:border-rose-200 hover:bg-rose-50/60 hover:text-rose-600 focus-visible:ring-rose-300`}
       >

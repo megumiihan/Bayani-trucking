@@ -268,9 +268,9 @@ export default function LogBillableModal({
                 value={preview ? formatCurrency(preview.withholdingTax) : "—"}
               />
               <PreviewRow
-                label="Total invoice"
-                hint="Taxable + output tax + withholding tax"
-                value={preview ? formatCurrency(preview.invoiceTotal) : "—"}
+                label="Total tax"
+                hint="Output tax + withholding tax"
+                value={preview ? formatCurrency(preview.totalTax) : "—"}
                 emphasize
               />
             </dl>

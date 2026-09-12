@@ -101,7 +101,8 @@ model Client {
   shipments        ShipmentLog[]
   rateHistory      DestinationRateHistory[]
   clientRateHistory ClientRateHistory[]
-  billables        Billable[]
+  billables            Billable[]
+  collectionReceipts   CollectionReceipt[]
 }
 
 enum CalculationType {
@@ -264,6 +265,11 @@ model Expense {
   date        DateTime
   category    ExpenseCategory
   amount      Float
+  address     String          @default("")
+  invoiceNo   String          @default("")
+  vatRegNo    String          @default("")
+  vatPurchase Float           @default(0)
+  inputTax    Float           @default(0)
   description String?
   isFlagged   Boolean         @default(false)
   isReimbursed Boolean        @default(false)
@@ -291,6 +297,7 @@ model Billable {
   taxableAmt              Float
   outputTax               Float    @default(0)
   withholdingTax          Float    @default(0)
+  totalTax                Float    @default(0)
   vatDeduction            Boolean  @default(true)
   withholdingTaxDeduction Boolean  @default(false)
   createdById             String
@@ -315,15 +322,19 @@ model Disbursement {
 }
 
 model CollectionReceipt {
-  id           String   @id @default(uuid())
-  date         DateTime
-  receivedFrom String
-  amount       Float
-  receiptNo    String   @unique
-  description  String?
-  createdById  String
-  createdBy    Profile  @relation(fields: [createdById], references: [id])
-  createdAt    DateTime @default(now())
+  id             String   @id @default(uuid())
+  datePaid       DateTime
+  orNumber       String   @unique
+  amount         Float
+  paymentDetails String   @default("")
+  whoPaid        String
+  whoReceived    String
+  clientId       String?
+  client         Client?  @relation(fields: [clientId], references: [id])
+  clientName     String   @default("")
+  createdById    String
+  createdBy      Profile  @relation(fields: [createdById], references: [id])
+  createdAt      DateTime @default(now())
 
-  @@index([date(sort: Desc)])
+  @@index([datePaid(sort: Desc)])
 }

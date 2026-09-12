@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import type { CollectionReceiptWriteInput } from "@/lib/bookkeeping";
+import type { Client } from "@/lib/clients";
 import { inputClass } from "@/components/ui/formStyles";
 import { useEscapeToClose } from "@/components/ui/useEscapeToClose";
 
@@ -9,6 +10,7 @@ interface LogCollectionReceiptModalProps {
   isOpen: boolean;
   isSaving: boolean;
   error: string | null;
+  clients: Client[];
   onClose: () => void;
   onSave: (input: CollectionReceiptWriteInput) => Promise<void>;
 }
@@ -21,22 +23,27 @@ export default function LogCollectionReceiptModal({
   isOpen,
   isSaving,
   error,
+  clients,
   onClose,
   onSave,
 }: LogCollectionReceiptModalProps) {
-  const [date, setDate] = useState(todayISO);
-  const [receivedFrom, setReceivedFrom] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [orNumber, setOrNumber] = useState("");
   const [amount, setAmount] = useState("");
-  const [receiptNo, setReceiptNo] = useState("");
-  const [description, setDescription] = useState("");
+  const [paymentDetails, setPaymentDetails] = useState("");
+  const [datePaid, setDatePaid] = useState(todayISO);
+  const [whoPaid, setWhoPaid] = useState("");
+  const [whoReceived, setWhoReceived] = useState("");
 
   useEffect(() => {
     if (!isOpen) return;
-    setDate(todayISO());
-    setReceivedFrom("");
+    setClientId("");
+    setOrNumber("");
     setAmount("");
-    setReceiptNo("");
-    setDescription("");
+    setPaymentDetails("");
+    setDatePaid(todayISO());
+    setWhoPaid("");
+    setWhoReceived("");
   }, [isOpen]);
 
   useEscapeToClose(isOpen, onClose, isSaving);
@@ -44,16 +51,19 @@ export default function LogCollectionReceiptModal({
   if (!isOpen) return null;
 
   const parsedAmount = Number(amount);
+  const hasValidAmount = Number.isFinite(parsedAmount) && parsedAmount > 0;
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (isSaving || !Number.isFinite(parsedAmount) || parsedAmount <= 0) return;
+    if (isSaving || !hasValidAmount) return;
     await onSave({
-      date,
-      receivedFrom,
+      clientId,
+      orNumber,
       amount: parsedAmount,
-      receiptNo,
-      description,
+      paymentDetails,
+      datePaid,
+      whoPaid,
+      whoReceived,
     });
   };
 
@@ -77,45 +87,38 @@ export default function LogCollectionReceiptModal({
           Log collection receipt
         </h2>
         <p className="mt-1 text-sm text-gray-500">
-          Record money received. Description is optional.
+          Record an official receipt for money collected.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-gray-700">
-              Date
+              Client
             </span>
-            <input
-              type="date"
+            <select
               required
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
               className={inputClass}
-            />
+            >
+              <option value="">Select a client</option>
+              {clients.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.name}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-gray-700">
-              Received from
+              OR number
             </span>
             <input
               type="text"
               required
-              value={receivedFrom}
-              onChange={(e) => setReceivedFrom(e.target.value)}
-              className={inputClass}
-            />
-          </label>
-
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-gray-700">
-              Receipt no.
-            </span>
-            <input
-              type="text"
-              required
-              value={receiptNo}
-              onChange={(e) => setReceiptNo(e.target.value)}
+              value={orNumber}
+              onChange={(e) => setOrNumber(e.target.value)}
               className={inputClass}
             />
           </label>
@@ -138,13 +141,53 @@ export default function LogCollectionReceiptModal({
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-gray-700">
-              Description
-              <span className="ml-1 font-normal text-gray-400">(optional)</span>
+              Payment details
             </span>
-            <textarea
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+            <input
+              type="text"
+              required
+              value={paymentDetails}
+              onChange={(e) => setPaymentDetails(e.target.value)}
+              placeholder="Check number"
+              className={inputClass}
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">
+              Date paid
+            </span>
+            <input
+              type="date"
+              required
+              value={datePaid}
+              onChange={(e) => setDatePaid(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">
+              Who paid
+            </span>
+            <input
+              type="text"
+              required
+              value={whoPaid}
+              onChange={(e) => setWhoPaid(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">
+              Who received
+            </span>
+            <input
+              type="text"
+              required
+              value={whoReceived}
+              onChange={(e) => setWhoReceived(e.target.value)}
               className={inputClass}
             />
           </label>
@@ -169,9 +212,7 @@ export default function LogCollectionReceiptModal({
             </button>
             <button
               type="submit"
-              disabled={
-                isSaving || !Number.isFinite(parsedAmount) || parsedAmount <= 0
-              }
+              disabled={isSaving || !hasValidAmount}
               className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-gray-300"
             >
               {isSaving ? "Saving…" : "Save collection receipt"}

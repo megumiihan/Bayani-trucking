@@ -15,6 +15,7 @@ import {
 import {
   billableInclude,
   bookkeepingActorInclude,
+  collectionReceiptInclude,
   mapBillableToUi,
   mapCollectionReceiptToUi,
   mapDisbursementToUi,
@@ -25,8 +26,8 @@ function revalidateBookkeeping() {
   revalidatePath("/admin/bookkeeping");
 }
 
-function requireDate(date: string) {
-  if (!date) return "Date is required.";
+function requireDate(date: string, label = "Date") {
+  if (!date) return `${label} is required.`;
   return null;
 }
 
@@ -63,6 +64,7 @@ type PreparedBillableWrite =
       taxableAmt: number;
       outputTax: number;
       withholdingTax: number;
+      totalTax: number;
       vatDeduction: boolean;
       withholdingTaxDeduction: boolean;
     } }
@@ -109,6 +111,7 @@ async function prepareBillableWrite(
       taxableAmt: breakdown.taxableAmt,
       outputTax: breakdown.outputTax,
       withholdingTax: breakdown.withholdingTax,
+      totalTax: breakdown.totalTax,
       vatDeduction: input.vatDeduction,
       withholdingTaxDeduction: input.withholdingTaxDeduction,
     },
@@ -275,26 +278,43 @@ export async function saveCollectionReceipt(
   try {
     const user = await requireAdmin();
     const invalid =
-      requireDate(input.date) ?? requirePositiveAmount(input.amount, "amount");
+      requireDate(input.datePaid, "Date paid") ??
+      requirePositiveAmount(input.amount, "amount");
     if (invalid) return { success: false, error: invalid };
 
-    const receivedFrom = input.receivedFrom.trim();
-    const receiptNo = input.receiptNo.trim();
-    if (!receivedFrom) {
-      return { success: false, error: "Received from is required." };
+    const orNumber = input.orNumber.trim();
+    const paymentDetails = input.paymentDetails.trim();
+    const whoPaid = input.whoPaid.trim();
+    const whoReceived = input.whoReceived.trim();
+    if (!input.clientId) return { success: false, error: "Client is required." };
+    if (!orNumber) return { success: false, error: "OR number is required." };
+    if (!paymentDetails) {
+      return { success: false, error: "Payment details are required." };
     }
-    if (!receiptNo) return { success: false, error: "Receipt no. is required." };
+    if (!whoPaid) return { success: false, error: "Who paid is required." };
+    if (!whoReceived) {
+      return { success: false, error: "Who received is required." };
+    }
+
+    const client = await prisma.client.findUnique({
+      where: { id: input.clientId },
+      select: { id: true, name: true },
+    });
+    if (!client) return { success: false, error: "Client not found." };
 
     const record = await prisma.collectionReceipt.create({
       data: {
-        date: new Date(input.date),
-        receivedFrom,
+        datePaid: new Date(input.datePaid),
+        orNumber,
         amount: input.amount,
-        receiptNo,
-        description: input.description?.trim() || null,
+        paymentDetails,
+        whoPaid,
+        whoReceived,
+        clientId: client.id,
+        clientName: client.name,
         createdById: user.id,
       },
-      include: bookkeepingActorInclude,
+      include: collectionReceiptInclude,
     });
 
     revalidateBookkeeping();
@@ -302,7 +322,7 @@ export async function saveCollectionReceipt(
   } catch (error) {
     const duplicate = uniqueConstraintMessage(
       error,
-      "An entry with this receipt no. already exists."
+      "An entry with this OR number already exists."
     );
     if (duplicate) return { success: false, error: duplicate };
 

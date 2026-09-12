@@ -38,9 +38,9 @@ export function computeBillableBreakdown(
   const withholdingTax = withholdingTaxDeduction
     ? roundMoney(taxableAmt * WITHHOLDING_TAX_RATE)
     : 0;
-  const invoiceTotal = roundMoney(taxableAmt + outputTax + withholdingTax);
+  const totalTax = roundMoney(outputTax + withholdingTax);
 
-  return { taxableAmt, outputTax, withholdingTax, invoiceTotal };
+  return { taxableAmt, outputTax, withholdingTax, totalTax };
 }
 
 export type BillableUi = {
@@ -55,7 +55,7 @@ export type BillableUi = {
   taxableAmt: number;
   outputTax: number;
   withholdingTax: number;
-  invoiceTotal: number;
+  totalTax: number;
   vatDeduction: boolean;
   withholdingTaxDeduction: boolean;
   createdByName: string;
@@ -92,18 +92,23 @@ export type DisbursementWriteInput = {
 
 export type CollectionReceiptUi = {
   id: string;
-  date: string;
-  receivedFrom: string;
+  datePaid: string;
+  orNumber: string;
   amount: number;
-  receiptNo: string;
-  description: string;
+  paymentDetails: string;
+  whoPaid: string;
+  whoReceived: string;
+  clientId: string | null;
+  clientName: string;
   createdByName: string;
 };
 
 export type CollectionReceiptWriteInput = {
-  date: string;
-  receivedFrom: string;
+  datePaid: string;
+  orNumber: string;
   amount: number;
-  receiptNo: string;
-  description?: string;
+  paymentDetails: string;
+  whoPaid: string;
+  whoReceived: string;
+  clientId: string;
 };

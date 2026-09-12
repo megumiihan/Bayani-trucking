@@ -6,12 +6,17 @@ import {
   getCollectionReceipts,
   getDisbursements,
 } from "@/lib/queries/bookkeeping";
+import { isBookkeepingLedger, type BookkeepingLedger } from "@/lib/bookkeeping";
 import { getTrucks } from "@/lib/queries/trucks";
 import AdminBookkeeping from "@/components/views/AdminBookkeeping";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminBookkeepingPage() {
+export default async function AdminBookkeepingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ledger?: string }>;
+}) {
   const [
     billables,
     expenses,
@@ -30,8 +35,15 @@ export default async function AdminBookkeepingPage() {
     getClients(),
   ]);
 
+  const { ledger } = await searchParams;
+  const requestedLedger = ledger ?? "";
+  const initialLedger: BookkeepingLedger = isBookkeepingLedger(requestedLedger)
+    ? requestedLedger
+    : "billables";
+
   return (
     <AdminBookkeeping
+      initialLedger={initialLedger}
       initialBillables={billables}
       initialExpenses={expenses}
       initialDisbursements={disbursements}

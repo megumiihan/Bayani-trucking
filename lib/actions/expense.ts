@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import {
   EXPENSE_CATEGORIES,
+  computeExpenseVat,
   expenseAllowsTruck,
   type ExpenseUi,
   type ExpenseWriteInput,
@@ -17,7 +18,7 @@ function validateWrite(input: ExpenseWriteInput) {
     return "Choose a valid category.";
   }
   if (!Number.isFinite(input.amount) || input.amount <= 0) {
-    return "Enter an amount greater than zero.";
+    return "Enter a total invoice amount greater than zero.";
   }
   return null;
 }
@@ -28,10 +29,16 @@ function resolvedTruckId(input: ExpenseWriteInput) {
 }
 
 function toWriteData(input: ExpenseWriteInput) {
+  const vat = computeExpenseVat(input.amount);
   return {
     date: new Date(input.date),
     category: input.category,
     amount: input.amount,
+    address: input.address?.trim() || "",
+    invoiceNo: input.invoiceNo?.trim() || "",
+    vatRegNo: input.vatRegNo?.trim() || "",
+    vatPurchase: vat.vatPurchase,
+    inputTax: vat.inputTax,
     description: input.description?.trim() || null,
     employeeId: input.employeeId || null,
     truckId: resolvedTruckId(input),

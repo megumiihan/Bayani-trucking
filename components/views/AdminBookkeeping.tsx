@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useRole } from "@/context/RoleContext";
 import {
   deleteBillable,
@@ -10,13 +10,19 @@ import {
   saveDisbursement,
   updateBillable,
 } from "@/lib/actions/bookkeeping";
-import { saveExpense } from "@/lib/actions/expense";
+import { deleteExpense, saveExpense, updateExpense } from "@/lib/actions/expense";
 import {
   defaultBillableFilters,
   filterBillables,
   hasActiveBillableFilters,
   type BillableFilters,
 } from "@/lib/billableFilters";
+import {
+  defaultExpenseFilters,
+  filterExpenses,
+  hasActiveExpenseFilters,
+  type ExpenseFilters,
+} from "@/lib/expenseFilters";
 import {
   BOOKKEEPING_LEDGER_LABELS,
   BOOKKEEPING_LEDGERS,
@@ -30,16 +36,19 @@ import {
 } from "@/lib/bookkeeping";
 import type { Client } from "@/lib/clients";
 import { exportBillablesToCsv } from "@/lib/exportBillables";
+import { exportCollectionReceiptsToCsv } from "@/lib/exportCollectionReceipts";
+import { exportExpensesToCsv } from "@/lib/exportExpenses";
 import {
-  expenseCategoryLabel,
   type ExpenseUi,
   type ExpenseWriteInput,
 } from "@/lib/expenses";
 import { formatCurrency, type Employee } from "@/lib/mockData";
 import type { Truck } from "@/lib/trucks";
 import BillableFiltersBar from "@/components/admin/BillableFiltersBar";
+import ExpenseFiltersBar from "@/components/admin/ExpenseFiltersBar";
 import BillableRowActions from "@/components/admin/BillableRowActions";
 import DeleteBillableModal from "@/components/admin/DeleteBillableModal";
+import DeleteExpenseModal from "@/components/admin/DeleteExpenseModal";
 import LogBillableModal from "@/components/admin/LogBillableModal";
 import LogCollectionReceiptModal from "@/components/admin/LogCollectionReceiptModal";
 import LogDisbursementModal from "@/components/admin/LogDisbursementModal";
@@ -48,6 +57,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import PageHeader from "@/components/ui/PageHeader";
 
 interface AdminBookkeepingProps {
+  initialLedger: BookkeepingLedger;
   initialBillables: BillableUi[];
   initialExpenses: ExpenseUi[];
   initialDisbursements: DisbursementUi[];
@@ -65,6 +75,7 @@ const LOG_BUTTONS: { ledger: BookkeepingLedger; label: string }[] = [
 ];
 
 export default function AdminBookkeeping({
+  initialLedger,
   initialBillables,
   initialExpenses,
   initialDisbursements,
@@ -74,12 +85,18 @@ export default function AdminBookkeeping({
   clients,
 }: AdminBookkeepingProps) {
   const { role } = useRole();
-  const [ledger, setLedger] = useState<BookkeepingLedger>("billables");
+  const router = useRouter();
+  const pathname = usePathname();
+  const [ledger, setLedger] = useState<BookkeepingLedger>(initialLedger);
   const [openForm, setOpenForm] = useState<BookkeepingLedger | null>(null);
   const [editingBillable, setEditingBillable] = useState<BillableUi | null>(
     null
   );
+  const [editingExpense, setEditingExpense] = useState<ExpenseUi | null>(null);
   const [deletingBillable, setDeletingBillable] = useState<BillableUi | null>(
+    null
+  );
+  const [deletingExpense, setDeletingExpense] = useState<ExpenseUi | null>(
     null
   );
   const [isSaving, setIsSaving] = useState(false);
@@ -96,10 +113,18 @@ export default function AdminBookkeeping({
   const [billableFilters, setBillableFilters] = useState<BillableFilters>(
     defaultBillableFilters
   );
+  const [expenseFilters, setExpenseFilters] = useState<ExpenseFilters>(
+    defaultExpenseFilters
+  );
 
   const filteredBillables = useMemo(
     () => filterBillables(billables, billableFilters),
     [billables, billableFilters]
+  );
+
+  const filteredExpenses = useMemo(
+    () => filterExpenses(expenses, expenseFilters),
+    [expenses, expenseFilters]
   );
 
   useEffect(() => {
@@ -120,29 +145,29 @@ export default function AdminBookkeeping({
 
   const rowCount = useMemo(() => {
     if (ledger === "billables") return filteredBillables.length;
-    if (ledger === "expenses") return expenses.length;
+    if (ledger === "expenses") return filteredExpenses.length;
     if (ledger === "disbursement") return disbursements.length;
     return collectionReceipts.length;
   }, [
     collectionReceipts,
     disbursements,
-    expenses,
+    filteredExpenses,
     filteredBillables,
     ledger,
   ]);
 
   const total = useMemo(() => {
     if (ledger === "billables") {
-      return filteredBillables.reduce((sum, row) => sum + row.invoiceTotal, 0);
+      return filteredBillables.reduce((sum, row) => sum + row.totalTax, 0);
     }
     if (ledger === "expenses") {
-      return expenses.reduce((sum, row) => sum + row.amount, 0);
+      return filteredExpenses.reduce((sum, row) => sum + row.amount, 0);
     }
     if (ledger === "disbursement") {
       return disbursements.reduce((sum, row) => sum + row.amount, 0);
     }
     return collectionReceipts.reduce((sum, row) => sum + row.amount, 0);
-  }, [collectionReceipts, disbursements, expenses, filteredBillables, ledger]);
+  }, [collectionReceipts, disbursements, filteredExpenses, filteredBillables, ledger]);
 
   if (role !== "admin") {
     return (
@@ -152,10 +177,19 @@ export default function AdminBookkeeping({
     );
   }
 
+  const selectLedger = (next: BookkeepingLedger) => {
+    setLedger(next);
+    const params = new URLSearchParams();
+    if (next !== "billables") params.set("ledger", next);
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
   const openLogForm = (next: BookkeepingLedger) => {
     setSaveError(null);
     setEditingBillable(null);
-    setLedger(next);
+    setEditingExpense(null);
+    selectLedger(next);
     setOpenForm(next);
   };
 
@@ -166,10 +200,18 @@ export default function AdminBookkeeping({
     setOpenForm("billables");
   };
 
+  const openEditExpense = (expense: ExpenseUi) => {
+    setSaveError(null);
+    selectLedger("expenses");
+    setEditingExpense(expense);
+    setOpenForm("expenses");
+  };
+
   const closeForm = () => {
     if (isSaving) return;
     setOpenForm(null);
     setEditingBillable(null);
+    setEditingExpense(null);
     setSaveError(null);
   };
 
@@ -216,7 +258,9 @@ export default function AdminBookkeeping({
   const handleSaveExpense = async (input: ExpenseWriteInput) => {
     setIsSaving(true);
     setSaveError(null);
-    const result = await saveExpense(input);
+    const result = editingExpense
+      ? await updateExpense(editingExpense.id, input)
+      : await saveExpense(input);
     setIsSaving(false);
 
     if (!result.success) {
@@ -224,8 +268,31 @@ export default function AdminBookkeeping({
       return;
     }
 
-    setExpenses((current) => [result.expense, ...current]);
+    setExpenses((current) => {
+      if (editingExpense) {
+        return current.map((row) =>
+          row.id === editingExpense.id ? result.expense : row
+        );
+      }
+      return [result.expense, ...current];
+    });
     setOpenForm(null);
+    setEditingExpense(null);
+  };
+
+  const handleDeleteExpense = async (id: string) => {
+    setIsDeleting(true);
+    setDeleteError(null);
+    const result = await deleteExpense(id);
+    setIsDeleting(false);
+
+    if (!result.success) {
+      setDeleteError(result.error);
+      return;
+    }
+
+    setExpenses((current) => current.filter((row) => row.id !== id));
+    setDeletingExpense(null);
   };
 
   const handleSaveDisbursement = async (input: DisbursementWriteInput) => {
@@ -291,7 +358,7 @@ export default function AdminBookkeeping({
         </div>
         <div className="card-surface rounded-2xl p-5">
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-            {ledger === "billables" ? "Total invoice" : "Total in view"}
+            {ledger === "billables" ? "Total tax" : "Total in view"}
           </p>
           <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight text-slate-900">
             {formatCurrency(total)}
@@ -309,7 +376,13 @@ export default function AdminBookkeeping({
               <p className="text-sm text-slate-500">
                 {ledger === "billables"
                   ? `${filteredBillables.length} of ${billables.length} billables`
-                  : "Switch the table to review another ledger."}
+                  : ledger === "expenses"
+                    ? `${filteredExpenses.length} of ${expenses.length} expenses`
+                    : ledger === "collection-receipt"
+                      ? `${collectionReceipts.length} collection receipt${
+                          collectionReceipts.length === 1 ? "" : "s"
+                        }`
+                      : "Switch the table to review another ledger."}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
@@ -324,12 +397,26 @@ export default function AdminBookkeeping({
                 </button>
               )}
               {ledger === "expenses" && (
-                <Link
-                  href="/admin/expenses"
-                  className="text-sm font-medium text-blue-700 hover:text-blue-800"
+                <button
+                  type="button"
+                  onClick={() => exportExpensesToCsv(filteredExpenses)}
+                  disabled={filteredExpenses.length === 0}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Open full expenses page
-                </Link>
+                  Export CSV
+                </button>
+              )}
+              {ledger === "collection-receipt" && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    exportCollectionReceiptsToCsv(collectionReceipts)
+                  }
+                  disabled={collectionReceipts.length === 0}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Export CSV
+                </button>
               )}
             </div>
           </div>
@@ -347,7 +434,7 @@ export default function AdminBookkeeping({
                   type="button"
                   role="tab"
                   aria-selected={isActive}
-                  onClick={() => setLedger(value)}
+                  onClick={() => selectLedger(value)}
                   className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 ${
                     isActive
                       ? "bg-white text-blue-700 shadow-sm"
@@ -367,13 +454,30 @@ export default function AdminBookkeeping({
               onChange={setBillableFilters}
             />
           )}
+
+          {ledger === "expenses" && (
+            <ExpenseFiltersBar
+              filters={expenseFilters}
+              onChange={setExpenseFilters}
+            />
+          )}
+
+          {ledger === "disbursement" && (
+            <p
+              role="status"
+              className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+            >
+              Not yet usable. Features to be discussed.
+            </p>
+          )}
         </div>
 
         <LedgerTable
           ledger={ledger}
           billables={filteredBillables}
           hasBillableFilters={hasActiveBillableFilters(billableFilters)}
-          expenses={expenses}
+          expenses={filteredExpenses}
+          hasExpenseFilters={hasActiveExpenseFilters(expenseFilters)}
           disbursements={disbursements}
           collectionReceipts={collectionReceipts}
           onLog={() => openLogForm(ledger)}
@@ -381,6 +485,11 @@ export default function AdminBookkeeping({
           onDeleteBillable={(billable) => {
             setDeleteError(null);
             setDeletingBillable(billable);
+          }}
+          onEditExpense={openEditExpense}
+          onDeleteExpense={(expense) => {
+            setDeleteError(null);
+            setDeletingExpense(expense);
           }}
         />
       </section>
@@ -411,8 +520,20 @@ export default function AdminBookkeeping({
         error={saveError}
         employees={employees}
         trucks={trucks}
+        expense={editingExpense}
         onClose={closeForm}
         onSave={handleSaveExpense}
+      />
+      <DeleteExpenseModal
+        expense={deletingExpense}
+        isDeleting={isDeleting}
+        error={deleteError}
+        onClose={() => {
+          if (isDeleting) return;
+          setDeletingExpense(null);
+          setDeleteError(null);
+        }}
+        onConfirm={handleDeleteExpense}
       />
       <LogDisbursementModal
         isOpen={openForm === "disbursement"}
@@ -425,6 +546,7 @@ export default function AdminBookkeeping({
         isOpen={openForm === "collection-receipt"}
         isSaving={isSaving}
         error={saveError}
+        clients={clients}
         onClose={closeForm}
         onSave={handleSaveCollectionReceipt}
       />
@@ -437,21 +559,27 @@ function LedgerTable({
   billables,
   hasBillableFilters,
   expenses,
+  hasExpenseFilters,
   disbursements,
   collectionReceipts,
   onLog,
   onEditBillable,
   onDeleteBillable,
+  onEditExpense,
+  onDeleteExpense,
 }: {
   ledger: BookkeepingLedger;
   billables: BillableUi[];
   hasBillableFilters: boolean;
   expenses: ExpenseUi[];
+  hasExpenseFilters: boolean;
   disbursements: DisbursementUi[];
   collectionReceipts: CollectionReceiptUi[];
   onLog: () => void;
   onEditBillable: (billable: BillableUi) => void;
   onDeleteBillable: (billable: BillableUi) => void;
+  onEditExpense: (expense: ExpenseUi) => void;
+  onDeleteExpense: (expense: ExpenseUi) => void;
 }) {
   if (ledger === "billables") {
     return (
@@ -466,7 +594,7 @@ function LedgerTable({
           "Taxable amount",
           "Output tax",
           "Withholding tax",
-          "Total invoice",
+          "Total tax",
           "Logged by",
           "Actions",
         ]}
@@ -511,7 +639,7 @@ function LedgerTable({
               {formatCurrency(row.withholdingTax)}
             </td>
             <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
-              {formatCurrency(row.invoiceTotal)}
+              {formatCurrency(row.totalTax)}
             </td>
             <td className="whitespace-nowrap px-4 py-3 text-slate-700">
               {row.createdByName}
@@ -531,10 +659,29 @@ function LedgerTable({
   if (ledger === "expenses") {
     return (
       <DataTable
-        columns={["Date", "Category", "Amount", "Description", "Logged by"]}
-        emptyTitle="No expenses yet"
-        emptyDescription="Log a company cost to see it in this table."
-        onLog={onLog}
+        columns={[
+          "Date",
+          "Name and address",
+          "Total invoice amount",
+          "Invoice no.",
+          "VAT Reg. No.",
+          "VAT purchase",
+          "Input tax",
+          "Description",
+          "Logged by",
+          "Actions",
+        ]}
+        emptyTitle={
+          hasExpenseFilters
+            ? "No expenses match these filters"
+            : "No expenses yet"
+        }
+        emptyDescription={
+          hasExpenseFilters
+            ? "Try another category, date, or search."
+            : "Log a company cost to see it in this table."
+        }
+        onLog={hasExpenseFilters ? undefined : onLog}
         isEmpty={expenses.length === 0}
       >
         {expenses.map((row) => (
@@ -542,17 +689,37 @@ function LedgerTable({
             <td className="whitespace-nowrap px-4 py-3 text-slate-700">
               {row.date}
             </td>
-            <td className="whitespace-nowrap px-4 py-3 text-slate-900">
-              {expenseCategoryLabel(row.category)}
+            <td className="max-w-xs px-4 py-3 text-slate-900">
+              {row.address || "—"}
             </td>
             <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
               {formatCurrency(row.amount)}
+            </td>
+            <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+              {row.invoiceNo || "—"}
+            </td>
+            <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+              {row.vatRegNo || "—"}
+            </td>
+            <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+              {formatCurrency(row.vatPurchase)}
+            </td>
+            <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+              {formatCurrency(row.inputTax)}
             </td>
             <td className="max-w-xs px-4 py-3 text-slate-500">
               {row.description || "—"}
             </td>
             <td className="whitespace-nowrap px-4 py-3 text-slate-700">
               {row.createdByName}
+            </td>
+            <td className="whitespace-nowrap px-4 py-3">
+              <BillableRowActions
+                editLabel="Edit expense"
+                deleteLabel="Delete expense"
+                onEdit={() => onEditExpense(row)}
+                onDelete={() => onDeleteExpense(row)}
+              />
             </td>
           </tr>
         ))}
@@ -605,34 +772,42 @@ function LedgerTable({
   return (
     <DataTable
       columns={[
-        "Date",
-        "Received from",
-        "Receipt no.",
+        "Client",
+        "OR number",
         "Amount",
-        "Description",
+        "Payment details",
+        "Date paid",
+        "Who paid",
+        "Who received",
         "Logged by",
       ]}
       emptyTitle="No collection receipts yet"
-      emptyDescription="Log money received to see it in this table."
+      emptyDescription="Log an official receipt to see it in this table."
       onLog={onLog}
       isEmpty={collectionReceipts.length === 0}
     >
       {collectionReceipts.map((row) => (
         <tr key={row.id} className="hover:bg-slate-50">
-          <td className="whitespace-nowrap px-4 py-3 text-slate-700">
-            {row.date}
-          </td>
           <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
-            {row.receivedFrom}
+            {row.clientName || "—"}
           </td>
           <td className="whitespace-nowrap px-4 py-3 text-slate-700">
-            {row.receiptNo}
+            {row.orNumber}
           </td>
           <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
             {formatCurrency(row.amount)}
           </td>
-          <td className="max-w-xs px-4 py-3 text-slate-500">
-            {row.description || "—"}
+          <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+            {row.paymentDetails || "—"}
+          </td>
+          <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+            {row.datePaid}
+          </td>
+          <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+            {row.whoPaid}
+          </td>
+          <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+            {row.whoReceived}
           </td>
           <td className="whitespace-nowrap px-4 py-3 text-slate-700">
             {row.createdByName}

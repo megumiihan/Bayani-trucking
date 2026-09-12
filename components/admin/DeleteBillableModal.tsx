@@ -67,8 +67,8 @@ export default function DeleteBillableModal({
           <PreviewRow label="Buyer" value={billable.buyerName || "—"} />
           <PreviewRow label="Address" value={billable.buyerAddress || "—"} />
           <PreviewRow
-            label="Total invoice"
-            value={formatCurrency(billable.invoiceTotal)}
+            label="Total tax"
+            value={formatCurrency(billable.totalTax)}
           />
         </dl>
 

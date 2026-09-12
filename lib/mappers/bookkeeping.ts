@@ -23,6 +23,11 @@ export const billableInclude = {
   client: { select: { id: true, name: true } },
 } as const;
 
+export const collectionReceiptInclude = {
+  ...bookkeepingActorInclude,
+  client: { select: { id: true, name: true } },
+} as const;
+
 type BookkeepingActor = Pick<Profile, "email"> & {
   employee: { fullName: string } | null;
 };
@@ -53,9 +58,9 @@ export function mapBillableToUi(
     taxableAmt: record.taxableAmt,
     outputTax: record.outputTax,
     withholdingTax: record.withholdingTax,
-    invoiceTotal: roundMoney(
-      record.taxableAmt + record.outputTax + record.withholdingTax
-    ),
+    totalTax:
+      record.totalTax ||
+      roundMoney(record.outputTax + record.withholdingTax),
     vatDeduction: record.vatDeduction,
     withholdingTaxDeduction: record.withholdingTaxDeduction,
     createdByName: actorName(record.createdBy),
@@ -77,15 +82,21 @@ export function mapDisbursementToUi(
 }
 
 export function mapCollectionReceiptToUi(
-  record: CollectionReceipt & { createdBy: BookkeepingActor }
+  record: CollectionReceipt & {
+    createdBy: BookkeepingActor;
+    client: Pick<Client, "id" | "name"> | null;
+  }
 ): CollectionReceiptUi {
   return {
     id: record.id,
-    date: isoDate(record.date),
-    receivedFrom: record.receivedFrom,
+    datePaid: isoDate(record.datePaid),
+    orNumber: record.orNumber,
     amount: record.amount,
-    receiptNo: record.receiptNo,
-    description: record.description ?? "",
+    paymentDetails: record.paymentDetails,
+    whoPaid: record.whoPaid,
+    whoReceived: record.whoReceived,
+    clientId: record.clientId,
+    clientName: record.client?.name || record.clientName,
     createdByName: actorName(record.createdBy),
   };
 }

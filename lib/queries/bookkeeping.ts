@@ -4,6 +4,7 @@ import {
   mapDisbursementToUi,
   billableInclude,
   bookkeepingActorInclude,
+  collectionReceiptInclude,
 } from "@/lib/mappers/bookkeeping";
 import { prisma } from "@/lib/prisma";
 
@@ -27,8 +28,8 @@ export async function getDisbursements() {
 
 export async function getCollectionReceipts() {
   const records = await prisma.collectionReceipt.findMany({
-    include: bookkeepingActorInclude,
-    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    include: collectionReceiptInclude,
+    orderBy: [{ datePaid: "desc" }, { createdAt: "desc" }],
   });
 
   return records.map(mapCollectionReceiptToUi);

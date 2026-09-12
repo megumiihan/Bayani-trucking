@@ -62,10 +62,17 @@ export default function DeleteExpenseModal({
         <dl className="mt-5 space-y-2 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm">
           <PreviewRow label="Date" value={expense.date} />
           <PreviewRow
+            label="Name and address"
+            value={expense.address || "—"}
+          />
+          <PreviewRow
             label="Category"
             value={expenseCategoryLabel(expense.category)}
           />
-          <PreviewRow label="Amount" value={formatCurrency(expense.amount)} />
+          <PreviewRow
+            label="Total invoice amount"
+            value={formatCurrency(expense.amount)}
+          />
           <PreviewRow label="Truck" value={expense.truckLabel || "—"} />
           <PreviewRow label="Employee" value={expense.employeeName || "—"} />
           <PreviewRow
