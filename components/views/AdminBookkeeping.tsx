@@ -45,6 +45,7 @@ import {
 import { formatCurrency, type Employee } from "@/lib/mockData";
 import type { Truck } from "@/lib/trucks";
 import BillableFiltersBar from "@/components/admin/BillableFiltersBar";
+import ClientBillableSummary from "@/components/admin/ClientBillableSummary";
 import ExpenseFiltersBar from "@/components/admin/ExpenseFiltersBar";
 import BillableRowActions from "@/components/admin/BillableRowActions";
 import DeleteBillableModal from "@/components/admin/DeleteBillableModal";
@@ -166,8 +167,25 @@ export default function AdminBookkeeping({
     if (ledger === "disbursement") {
       return disbursements.reduce((sum, row) => sum + row.amount, 0);
     }
-    return collectionReceipts.reduce((sum, row) => sum + row.amount, 0);
+    return collectionReceipts.reduce(
+      (sum, row) => sum + row.collectionAmount,
+      0
+    );
   }, [collectionReceipts, disbursements, filteredExpenses, filteredBillables, ledger]);
+
+  const totalBillables = useMemo(
+    () => billables.reduce((sum, row) => sum + row.totalInvoiceAmt, 0),
+    [billables]
+  );
+
+  const totalCollections = useMemo(
+    () =>
+      collectionReceipts.reduce((sum, row) => sum + row.collectionAmount, 0),
+    [collectionReceipts]
+  );
+
+  const remainingBillables = totalBillables - totalCollections;
+
 
   if (role !== "admin") {
     return (
@@ -332,39 +350,67 @@ export default function AdminBookkeeping({
       <PageHeader
         title="Bookkeeping"
         description="Log billables, expenses, disbursements, and collection receipts from one place."
-      />
-
-      <div className="mb-6 flex flex-wrap gap-2">
-        {LOG_BUTTONS.map((button) => (
+        actions={LOG_BUTTONS.map((button) => (
           <button
             key={button.ledger}
             type="button"
             onClick={() => openLogForm(button.ledger)}
-            className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+            className="rounded-lg bg-blue-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
           >
             {button.label}
           </button>
         ))}
-      </div>
+      />
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="card-surface rounded-2xl p-5">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-            Rows in {BOOKKEEPING_LEDGER_LABELS[ledger].toLowerCase()}
-          </p>
-          <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight text-slate-900">
-            {rowCount}
-          </p>
+          {ledger === "billables" ? (
+            <DashboardStat
+              label="Total tax"
+              value={formatCurrency(total)}
+            />
+          ) : (
+            <DashboardStat
+              label={`Rows in ${BOOKKEEPING_LEDGER_LABELS[ledger].toLowerCase()}`}
+              value={String(rowCount)}
+            />
+          )}
         </div>
         <div className="card-surface rounded-2xl p-5">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-            {ledger === "billables" ? "Total tax" : "Total in view"}
-          </p>
-          <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight text-slate-900">
-            {formatCurrency(total)}
-          </p>
+          {ledger === "billables" ? (
+            <div className="grid grid-cols-2 gap-4">
+              <DashboardStat
+                compact
+                label="Total billables"
+                value={formatCurrency(totalBillables)}
+              />
+              <DashboardStat
+                compact
+                label="After collections"
+                value={formatCurrency(remainingBillables)}
+                hint={`${formatCurrency(totalBillables)} − ${formatCurrency(totalCollections)} collections`}
+              />
+            </div>
+          ) : (
+            <DashboardStat
+              label={
+                ledger === "collection-receipt"
+                  ? "Total collection amount"
+                  : "Total in view"
+              }
+              value={formatCurrency(total)}
+            />
+          )}
         </div>
       </div>
+
+      {ledger === "billables" && (
+        <ClientBillableSummary
+          billables={billables}
+          receipts={collectionReceipts}
+          clients={clients}
+        />
+      )}
 
       <section className="card-surface overflow-hidden rounded-2xl">
         <div className="flex flex-col gap-4 border-b border-slate-100 px-6 py-4">
@@ -550,6 +596,34 @@ export default function AdminBookkeeping({
         onClose={closeForm}
         onSave={handleSaveCollectionReceipt}
       />
+    </div>
+  );
+}
+
+function DashboardStat({
+  label,
+  value,
+  hint,
+  compact = false,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  compact?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        {label}
+      </p>
+      <p
+        className={`mt-2 font-bold tabular-nums tracking-tight text-slate-900 ${
+          compact ? "text-2xl" : "text-3xl"
+        }`}
+      >
+        {value}
+      </p>
+      {hint ? <p className="mt-1 text-xs text-slate-500">{hint}</p> : null}
     </div>
   );
 }
@@ -774,7 +848,7 @@ function LedgerTable({
       columns={[
         "Client",
         "OR number",
-        "Amount",
+        "Collection amount",
         "Payment details",
         "Date paid",
         "Who paid",
@@ -795,7 +869,7 @@ function LedgerTable({
             {row.orNumber}
           </td>
           <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
-            {formatCurrency(row.amount)}
+            {formatCurrency(row.collectionAmount)}
           </td>
           <td className="whitespace-nowrap px-4 py-3 text-slate-700">
             {row.paymentDetails || "—"}

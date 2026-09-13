@@ -12,7 +12,7 @@ export function exportCollectionReceiptsToCsv(receipts: CollectionReceiptUi[]) {
   const header = [
     "Client",
     "OR number",
-    "Amount",
+    "Collection amount",
     "Payment details",
     "Date paid",
     "Who paid",
@@ -23,7 +23,7 @@ export function exportCollectionReceiptsToCsv(receipts: CollectionReceiptUi[]) {
   const rows = receipts.map((row) => [
     row.clientName,
     row.orNumber,
-    row.amount.toFixed(2),
+    row.collectionAmount.toFixed(2),
     row.paymentDetails,
     row.datePaid,
     row.whoPaid,

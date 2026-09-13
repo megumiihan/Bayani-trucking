@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   formatCurrency,
   shipmentRoleColors,
@@ -8,12 +8,13 @@ import {
   type Employee,
   type Shipment,
 } from "@/lib/mockData";
+import type { SalaryPaymentUi } from "@/lib/mappers/salaryPayment";
 import {
+  buildPayoutLedger,
   formatMonthLabel,
   getEmployeeShipmentEntries,
   getMonthKey,
   getMonthlyEarningsTotal,
-  type EmployeeShipmentEntry,
 } from "@/lib/payout";
 import { useRole } from "@/context/RoleContext";
 import Badge from "@/components/ui/Badge";
@@ -45,14 +46,17 @@ function getPreviousMonthKeys(count: number): string[] {
 interface EmployeeProfileProps {
   initialShipments: Shipment[];
   initialEmployees: Employee[];
+  initialPayments: SalaryPaymentUi[];
 }
 
 export default function EmployeeProfile({
   initialShipments,
   initialEmployees,
+  initialPayments,
 }: EmployeeProfileProps) {
   const [shipments] = useState(initialShipments);
   const [employees] = useState(initialEmployees);
+  const [payments, setPayments] = useState(initialPayments);
   const { currentEmployee, setCurrentEmployee, isAdmin } = useRole();
   const [monthFilter, setMonthFilter] = useState(ALL_MONTHS);
   const [clientFilter, setClientFilter] = useState(ALL_CLIENTS);
@@ -60,15 +64,29 @@ export default function EmployeeProfile({
   const employeeRecord = employees.find((e) => e.name === currentEmployee);
   const currentMonthKey = getCurrentMonthKey();
 
+  useEffect(() => {
+    setPayments(initialPayments);
+  }, [initialPayments]);
+
   const allEntries = useMemo(
     () => getEmployeeShipmentEntries(shipments, currentEmployee),
     [shipments, currentEmployee]
   );
 
+  const employeePayments = useMemo(() => {
+    if (!employeeRecord) return [];
+    return payments.filter((payment) => payment.employeeId === employeeRecord.id);
+  }, [employeeRecord, payments]);
+
+  const ledger = useMemo(
+    () => buildPayoutLedger(shipments, currentEmployee, employeePayments),
+    [currentEmployee, employeePayments, shipments]
+  );
+
   const monthOptions = useMemo(() => {
-    const keys = new Set(allEntries.map((entry) => getMonthKey(entry.shipment.date)));
+    const keys = new Set(ledger.map((row) => getMonthKey(row.date)));
     return Array.from(keys).sort((a, b) => b.localeCompare(a));
-  }, [allEntries]);
+  }, [ledger]);
 
   const clientOptions = useMemo(() => {
     const clients = new Set(allEntries.map((entry) => entry.shipment.client));
@@ -84,18 +102,22 @@ export default function EmployeeProfile({
     0
   );
 
+  const paidThisMonth = employeePayments
+    .filter((payment) => getMonthKey(payment.paidAt) === currentMonthKey)
+    .reduce((sum, payment) => sum + payment.amount, 0);
+
   const historicalMonths = getPreviousMonthKeys(3).map((monthKey) => ({
     monthKey,
     label: formatMonthLabel(monthKey),
     total: getMonthlyEarningsTotal(allEntries, monthKey),
   }));
 
-  const filteredEntries = allEntries.filter((entry) => {
+  const filteredLedger = ledger.filter((row) => {
     const matchesMonth =
-      monthFilter === ALL_MONTHS ||
-      getMonthKey(entry.shipment.date) === monthFilter;
+      monthFilter === ALL_MONTHS || getMonthKey(row.date) === monthFilter;
     const matchesClient =
-      clientFilter === ALL_CLIENTS || entry.shipment.client === clientFilter;
+      clientFilter === ALL_CLIENTS ||
+      (row.kind === "shipment" && row.client === clientFilter);
     return matchesMonth && matchesClient;
   });
 
@@ -182,6 +204,8 @@ export default function EmployeeProfile({
         <SummaryCard
           label="Expected Salary (Current Month)"
           value={formatCurrency(expectedSalary)}
+          extraLabel="Total Payout"
+          extraValue={formatCurrency(paidThisMonth)}
           sublabel={formatMonthLabel(currentMonthKey)}
           accent="green"
         />
@@ -194,15 +218,14 @@ export default function EmployeeProfile({
         <HistoricalPayCard months={historicalMonths} />
       </div>
 
-      {/* Shipment history */}
       <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="flex flex-col gap-4 border-b border-gray-100 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-base font-semibold text-gray-900">
-              Personal Shipment History
+              Payout ledger
             </h2>
             <p className="text-sm text-gray-500">
-              All deliveries where you served as Driver, Helper, or Extra Helper
+              Shipments you earned on, plus cash already paid out
             </p>
           </div>
 
@@ -240,16 +263,13 @@ export default function EmployeeProfile({
               <tr>
                 {[
                   "Date",
-                  "Plate #",
-                  "Shipment / Waybill",
-                  "Client",
-                  "Client #",
-                  "Farthest Route",
-                  "Role Served",
-                  "Calculated Payout",
-                  "Extra Helper",
-                  "Extra Helper Note",
-                  "Remarks",
+                  "Type",
+                  "Shipment / details",
+                  "Role",
+                  "Earned",
+                  "Paid",
+                  "Balance",
+                  "Note",
                 ].map((col) => (
                   <th
                     key={col}
@@ -261,16 +281,14 @@ export default function EmployeeProfile({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filteredEntries.length === 0 ? (
+              {filteredLedger.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-10 text-center text-gray-500">
-                    No shipments match the selected filters.
+                  <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
+                    No shipments or payouts match the selected filters.
                   </td>
                 </tr>
               ) : (
-                filteredEntries.map((entry) => (
-                  <ShipmentHistoryRow key={`${entry.shipment.id}-${entry.role}`} entry={entry} />
-                ))
+                filteredLedger.map((row) => <LedgerRow key={row.id} row={row} />)
               )}
             </tbody>
           </table>
@@ -280,53 +298,58 @@ export default function EmployeeProfile({
   );
 }
 
-function ShipmentHistoryRow({ entry }: { entry: EmployeeShipmentEntry }) {
-  const { shipment, role, payout } = entry;
+function LedgerRow({
+  row,
+}: {
+  row: ReturnType<typeof buildPayoutLedger>[number];
+}) {
+  const isPayment = row.kind === "payment";
 
   return (
-    <tr className="hover:bg-gray-50">
-      <td className="whitespace-nowrap px-4 py-3 text-gray-700">{shipment.date}</td>
-      <td className="whitespace-nowrap px-4 py-3 font-mono text-gray-600">
-        {shipment.plateNumber}
+    <tr className={isPayment ? "bg-emerald-50/40 hover:bg-emerald-50" : "hover:bg-gray-50"}>
+      <td className="whitespace-nowrap px-4 py-3 text-gray-700">{row.date}</td>
+      <td className="whitespace-nowrap px-4 py-3">
+        <Badge
+          label={isPayment ? "Payout" : "Shipment"}
+          className={
+            isPayment
+              ? "bg-emerald-100 text-emerald-800"
+              : "bg-blue-100 text-blue-800"
+          }
+        />
       </td>
       <td className="px-4 py-3">
-        <p className="font-mono text-xs font-medium text-gray-900">
-          {shipment.shipmentNumber}
-        </p>
-        <p className="font-mono text-xs text-gray-500">{shipment.waybillNumber}</p>
-      </td>
-      <td className="whitespace-nowrap px-4 py-3 text-gray-700">{shipment.client}</td>
-      <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-gray-600">
-        {shipment.clientNumber}
-      </td>
-      <td className="whitespace-nowrap px-4 py-3 text-gray-700">
-        <p>{shipment.farthestRoute}</p>
-        {shipment.pigheadCount != null && (
-          <p className="text-xs text-gray-500">{shipment.pigheadCount} heads</p>
-        )}
-        {shipment.platformRate != null && (
-          <p className="text-xs text-gray-500">
-            Rate {formatCurrency(shipment.platformRate)}
-          </p>
-        )}
-        {shipment.weightKg != null && (
-          <p className="text-xs text-gray-500">{shipment.weightKg} kg</p>
+        {isPayment ? (
+          <p className="font-medium text-gray-900">Salary payout</p>
+        ) : (
+          <>
+            <p className="font-mono text-xs font-medium text-gray-900">
+              {row.shipmentNumber}
+            </p>
+            <p className="text-xs text-gray-500">
+              {row.plateNumber} · {row.client} · {row.route}
+            </p>
+          </>
         )}
       </td>
       <td className="whitespace-nowrap px-4 py-3">
-        <Badge label={role} className={shipmentRoleColors[role]} />
+        {row.role ? (
+          <Badge label={row.role} className={shipmentRoleColors[row.role]} />
+        ) : (
+          <span className="text-gray-400">—</span>
+        )}
       </td>
       <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-900">
-        {formatCurrency(payout)}
+        {row.earned > 0 ? formatCurrency(row.earned) : "—"}
       </td>
-      <td className="whitespace-nowrap px-4 py-3 text-gray-700">
-        {shipment.extraHelper ?? "—"}
+      <td className="whitespace-nowrap px-4 py-3 font-medium text-emerald-800">
+        {row.paid > 0 ? formatCurrency(row.paid) : "—"}
       </td>
-      <td className="max-w-xs px-4 py-3 text-gray-500">
-        {shipment.extraHelperNote ?? "—"}
+      <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">
+        {formatCurrency(row.balanceAfter)}
       </td>
       <td className="max-w-xs truncate px-4 py-3 text-gray-500">
-        {shipment.remarks || "—"}
+        {row.note || "—"}
       </td>
     </tr>
   );
@@ -335,11 +358,15 @@ function ShipmentHistoryRow({ entry }: { entry: EmployeeShipmentEntry }) {
 function SummaryCard({
   label,
   value,
+  extraLabel,
+  extraValue,
   sublabel,
   accent = "blue",
 }: {
   label: string;
   value: string;
+  extraLabel?: string;
+  extraValue?: string;
   sublabel?: string;
   accent?: "blue" | "green";
 }) {
@@ -355,6 +382,16 @@ function SummaryCard({
       </p>
       <p className={`mt-1 text-2xl font-bold ${accentMap[accent]}`}>{value}</p>
       {sublabel && <p className="mt-1 text-xs text-gray-500">{sublabel}</p>}
+      {extraLabel && extraValue && (
+        <div className="mt-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-gray-500">
+            {extraLabel}
+          </p>
+          <p className={`mt-1 text-2xl font-bold ${accentMap[accent]}`}>
+            {extraValue}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

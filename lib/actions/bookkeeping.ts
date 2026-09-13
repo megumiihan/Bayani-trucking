@@ -279,7 +279,7 @@ export async function saveCollectionReceipt(
     const user = await requireAdmin();
     const invalid =
       requireDate(input.datePaid, "Date paid") ??
-      requirePositiveAmount(input.amount, "amount");
+      requirePositiveAmount(input.collectionAmount, "collection amount");
     if (invalid) return { success: false, error: invalid };
 
     const orNumber = input.orNumber.trim();
@@ -306,7 +306,7 @@ export async function saveCollectionReceipt(
       data: {
         datePaid: new Date(input.datePaid),
         orNumber,
-        amount: input.amount,
+        collectionAmount: input.collectionAmount,
         paymentDetails,
         whoPaid,
         whoReceived,

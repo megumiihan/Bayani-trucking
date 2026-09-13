@@ -59,7 +59,7 @@ export default function LogCollectionReceiptModal({
     await onSave({
       clientId,
       orNumber,
-      amount: parsedAmount,
+      collectionAmount: parsedAmount,
       paymentDetails,
       datePaid,
       whoPaid,
@@ -125,7 +125,7 @@ export default function LogCollectionReceiptModal({
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-gray-700">
-              Amount
+              Collection amount
             </span>
             <input
               type="number"

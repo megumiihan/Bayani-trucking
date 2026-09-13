@@ -7,7 +7,7 @@ import {
 } from "@/lib/expenses";
 import type { ExpenseFilters } from "@/lib/expenseFilters";
 import type { DateDuration } from "@/lib/shipmentFilters";
-import { inputClass } from "@/components/ui/formStyles";
+import { filterInputClass } from "@/components/ui/formStyles";
 
 interface ExpenseFiltersBarProps {
   filters: ExpenseFilters;
@@ -26,10 +26,10 @@ export default function ExpenseFiltersBar({
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <label>
-          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-slate-500">
             Category
           </span>
           <select
@@ -37,7 +37,7 @@ export default function ExpenseFiltersBar({
             onChange={(e) =>
               update("category", e.target.value as ExpenseFilters["category"])
             }
-            className={inputClass}
+            className={filterInputClass}
           >
             <option value="all">All categories</option>
             {EXPENSE_CATEGORIES.map((category) => (
@@ -49,7 +49,7 @@ export default function ExpenseFiltersBar({
         </label>
 
         <label>
-          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-slate-500">
             Date
           </span>
           <select
@@ -57,7 +57,7 @@ export default function ExpenseFiltersBar({
             onChange={(e) =>
               update("dateDuration", e.target.value as DateDuration)
             }
-            className={inputClass}
+            className={filterInputClass}
           >
             <option value="all">All time</option>
             <option value="today">Today</option>
@@ -68,88 +68,41 @@ export default function ExpenseFiltersBar({
         </label>
 
         <label>
-          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
-            Name and address
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-slate-500">
+            Search
           </span>
           <input
             type="search"
-            value={filters.nameAndAddress}
-            onChange={(e) => update("nameAndAddress", e.target.value)}
-            className={inputClass}
-          />
-        </label>
-
-        <label>
-          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
-            Invoice no.
-          </span>
-          <input
-            type="search"
-            value={filters.invoiceNo}
-            onChange={(e) => update("invoiceNo", e.target.value)}
-            className={inputClass}
-          />
-        </label>
-
-        <label>
-          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
-            VAT Reg. No.
-          </span>
-          <input
-            type="search"
-            value={filters.vatRegNo}
-            onChange={(e) => update("vatRegNo", e.target.value)}
-            className={inputClass}
-          />
-        </label>
-
-        <label>
-          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
-            Description
-          </span>
-          <input
-            type="search"
-            value={filters.description}
-            onChange={(e) => update("description", e.target.value)}
-            className={inputClass}
-          />
-        </label>
-
-        <label>
-          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
-            Logged by
-          </span>
-          <input
-            type="search"
-            value={filters.loggedBy}
-            onChange={(e) => update("loggedBy", e.target.value)}
-            className={inputClass}
+            value={filters.search}
+            onChange={(e) => update("search", e.target.value)}
+            placeholder="Name, invoice, VAT, description, logged by"
+            className={filterInputClass}
           />
         </label>
       </div>
 
       {filters.dateDuration === "custom" && (
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label>
-            <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-slate-500">
               Start date
             </span>
             <input
               type="date"
               value={filters.customStartDate}
               onChange={(e) => update("customStartDate", e.target.value)}
-              className={inputClass}
+              className={filterInputClass}
             />
           </label>
           <label>
-            <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-500">
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wider text-slate-500">
               End date
             </span>
             <input
               type="date"
               value={filters.customEndDate}
               onChange={(e) => update("customEndDate", e.target.value)}
-              className={inputClass}
+              className={filterInputClass}
             />
           </label>
         </div>

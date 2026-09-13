@@ -91,7 +91,7 @@ export function mapCollectionReceiptToUi(
     id: record.id,
     datePaid: isoDate(record.datePaid),
     orNumber: record.orNumber,
-    amount: record.amount,
+    collectionAmount: record.collectionAmount,
     paymentDetails: record.paymentDetails,
     whoPaid: record.whoPaid,
     whoReceived: record.whoReceived,

@@ -291,8 +291,8 @@ model Billable {
   vatRegNo                String
   buyerName               String   @default("")
   buyerAddress            String   @default("")
-  clientId                String?
-  client                  Client?  @relation(fields: [clientId], references: [id])
+  clientId                String
+  client                  Client   @relation(fields: [clientId], references: [id])
   totalInvoiceAmt         Float    @default(0)
   taxableAmt              Float
   outputTax               Float    @default(0)
@@ -305,6 +305,7 @@ model Billable {
   createdAt               DateTime @default(now())
 
   @@index([date(sort: Desc)])
+  @@index([clientId])
 }
 
 model Disbursement {
@@ -322,19 +323,20 @@ model Disbursement {
 }
 
 model CollectionReceipt {
-  id             String   @id @default(uuid())
-  datePaid       DateTime
-  orNumber       String   @unique
-  amount         Float
-  paymentDetails String   @default("")
-  whoPaid        String
-  whoReceived    String
-  clientId       String?
-  client         Client?  @relation(fields: [clientId], references: [id])
-  clientName     String   @default("")
-  createdById    String
-  createdBy      Profile  @relation(fields: [createdById], references: [id])
-  createdAt      DateTime @default(now())
+  id               String   @id @default(uuid())
+  datePaid         DateTime
+  orNumber         String   @unique
+  collectionAmount Float @map("amount")
+  paymentDetails   String   @default("")
+  whoPaid          String
+  whoReceived      String
+  clientId         String
+  client           Client   @relation(fields: [clientId], references: [id])
+  clientName       String   @default("")
+  createdById      String
+  createdBy        Profile  @relation(fields: [createdById], references: [id])
+  createdAt        DateTime @default(now())
 
   @@index([datePaid(sort: Desc)])
+  @@index([clientId])
 }

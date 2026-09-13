@@ -50,7 +50,7 @@ export type BillableUi = {
   vatRegNo: string;
   buyerName: string;
   buyerAddress: string;
-  clientId: string | null;
+  clientId: string;
   totalInvoiceAmt: number;
   taxableAmt: number;
   outputTax: number;
@@ -94,11 +94,11 @@ export type CollectionReceiptUi = {
   id: string;
   datePaid: string;
   orNumber: string;
-  amount: number;
+  collectionAmount: number;
   paymentDetails: string;
   whoPaid: string;
   whoReceived: string;
-  clientId: string | null;
+  clientId: string;
   clientName: string;
   createdByName: string;
 };
@@ -106,7 +106,7 @@ export type CollectionReceiptUi = {
 export type CollectionReceiptWriteInput = {
   datePaid: string;
   orNumber: string;
-  amount: number;
+  collectionAmount: number;
   paymentDetails: string;
   whoPaid: string;
   whoReceived: string;

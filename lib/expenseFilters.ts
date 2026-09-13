@@ -10,11 +10,7 @@ export interface ExpenseFilters {
   dateDuration: DateDuration;
   customStartDate: string;
   customEndDate: string;
-  nameAndAddress: string;
-  invoiceNo: string;
-  vatRegNo: string;
-  description: string;
-  loggedBy: string;
+  search: string;
 }
 
 export const defaultExpenseFilters: ExpenseFilters = {
@@ -22,11 +18,7 @@ export const defaultExpenseFilters: ExpenseFilters = {
   dateDuration: "all",
   customStartDate: "",
   customEndDate: "",
-  nameAndAddress: "",
-  invoiceNo: "",
-  vatRegNo: "",
-  description: "",
-  loggedBy: "",
+  search: "",
 };
 
 function matchesText(value: string, query: string) {
@@ -55,11 +47,16 @@ export function filterExpenses(
       return false;
     }
 
-    if (!matchesText(expense.address, filters.nameAndAddress)) return false;
-    if (!matchesText(expense.invoiceNo, filters.invoiceNo)) return false;
-    if (!matchesText(expense.vatRegNo, filters.vatRegNo)) return false;
-    if (!matchesText(expense.description, filters.description)) return false;
-    if (!matchesText(expense.createdByName, filters.loggedBy)) return false;
+    const search = filters.search;
+    if (
+      !matchesText(expense.address, search) &&
+      !matchesText(expense.invoiceNo, search) &&
+      !matchesText(expense.vatRegNo, search) &&
+      !matchesText(expense.description, search) &&
+      !matchesText(expense.createdByName, search)
+    ) {
+      return false;
+    }
 
     return true;
   });
@@ -69,10 +66,6 @@ export function hasActiveExpenseFilters(filters: ExpenseFilters) {
   return (
     filters.category !== "all" ||
     filters.dateDuration !== "all" ||
-    filters.nameAndAddress.trim() !== "" ||
-    filters.invoiceNo.trim() !== "" ||
-    filters.vatRegNo.trim() !== "" ||
-    filters.description.trim() !== "" ||
-    filters.loggedBy.trim() !== ""
+    filters.search.trim() !== ""
   );
 }
