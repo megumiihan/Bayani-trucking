@@ -18,7 +18,7 @@ import {
 } from "@/lib/payout";
 import { useRole } from "@/context/RoleContext";
 import Badge from "@/components/ui/Badge";
-import { BOUNTY_EXP_NEW, BOUNTY_EXP_OLD } from "@/lib/weight";
+import { BOUNTY_EXP_NEW, BOUNTY_EXP_OLD, bountyExpLabel } from "@/lib/weight";
 import PageHeader from "@/components/ui/PageHeader";
 
 const ALL_MONTHS = "all";
@@ -174,7 +174,7 @@ export default function EmployeeProfile({
                     className={tenureStatusColors[employeeRecord.tenureStatus]}
                   />
                   <Badge
-                    label={employeeRecord.bountyExp ?? BOUNTY_EXP_OLD}
+                    label={bountyExpLabel(employeeRecord.bountyExp)}
                     className={
                       (employeeRecord.bountyExp ?? BOUNTY_EXP_OLD) ===
                       BOUNTY_EXP_NEW

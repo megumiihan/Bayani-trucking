@@ -138,6 +138,8 @@ export interface PayoutLedgerRow {
   earned: number;
   paid: number;
   balanceAfter: number;
+  approved?: boolean;
+  shipmentId?: string;
 }
 
 export function buildPayoutLedger(
@@ -160,6 +162,8 @@ export function buildPayoutLedger(
       note: entry.shipment.remarks || null,
       earned: entry.payout,
       paid: 0,
+      approved: entry.shipment.approved,
+      shipmentId: entry.shipment.id,
     }));
 
   const paidRows: Omit<PayoutLedgerRow, "balanceAfter">[] = payments.map(
@@ -189,7 +193,9 @@ export function buildPayoutLedger(
 
   let balance = 0;
   const withBalance = chronological.map((row) => {
-    balance += row.earned - row.paid;
+    const effectiveEarned =
+      row.kind === "shipment" && row.approved === false ? 0 : row.earned;
+    balance += effectiveEarned - row.paid;
     return { ...row, balanceAfter: balance };
   });
 

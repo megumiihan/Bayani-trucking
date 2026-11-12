@@ -21,6 +21,7 @@ export interface Employee {
   tenureStatus: TenureStatus;
   remarks: string;
   bountyExp?: string;
+  isActive?: boolean;
 }
 
 export interface Shipment {

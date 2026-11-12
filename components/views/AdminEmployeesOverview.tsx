@@ -15,7 +15,7 @@ import {
   updateEmployeeRemarks,
 } from "@/lib/actions/employee";
 import Badge from "@/components/ui/Badge";
-import { BOUNTY_EXP_NEW, BOUNTY_EXP_OLD } from "@/lib/weight";
+import { BOUNTY_EXP_NEW, BOUNTY_EXP_OLD, bountyExpLabel } from "@/lib/weight";
 import PageHeader from "@/components/ui/PageHeader";
 
 interface AdminEmployeesOverviewProps {
@@ -169,7 +169,7 @@ function EmployeeCard({
             <button
               type="button"
               disabled={isSavingBountyExp}
-              title="Click to switch oldbounty / newbounty"
+              title="Click to switch between experienced / inexperienced"
               onClick={async () => {
                 const next =
                   bountyExp === BOUNTY_EXP_NEW
@@ -187,7 +187,7 @@ function EmployeeCard({
                   : "bg-amber-100 text-amber-800 hover:bg-amber-200"
               }`}
             >
-              {isSavingBountyExp ? "Saving…" : bountyExp}
+              {isSavingBountyExp ? "Saving…" : bountyExpLabel(bountyExp)}
             </button>
           </div>
         </div>

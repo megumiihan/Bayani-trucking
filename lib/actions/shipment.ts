@@ -471,6 +471,7 @@ export async function setShipmentApproval(
     revalidatePath("/");
     revalidatePath("/employee/profile");
     revalidatePath("/admin/employees");
+    revalidatePath("/admin/employees/[id]", "page");
 
     return {
       success: true,
@@ -506,6 +507,7 @@ export async function approveShipments(
     revalidatePath("/");
     revalidatePath("/employee/profile");
     revalidatePath("/admin/employees");
+    revalidatePath("/admin/employees/[id]", "page");
 
     return { success: true, count: result.count };
   } catch (error) {

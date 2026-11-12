@@ -1,5 +1,12 @@
 export const BOUNTY_EXP_OLD = "oldbounty";
 export const BOUNTY_EXP_NEW = "newbounty";
+
+/** Display label for a bounty experience tag; the stored value stays oldbounty/newbounty. */
+export function bountyExpLabel(tag: string | null | undefined) {
+  return tag === BOUNTY_EXP_NEW
+    ? "Bounty- inexperienced"
+    : "Bounty- experienced";
+}
 export const WEIGHT_TIER_KGS = [2000, 3000, 4000] as const;
 
 /** Seed rows for Bounty. Written to DestinationRoute. */
