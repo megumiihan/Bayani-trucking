@@ -13,6 +13,7 @@ const navLinks = {
   admin: [
     { href: "/", label: "Master Dashboard" },
     { href: "/admin/employees", label: "Employees" },
+    { href: "/admin/trucks", label: "Trucks" },
     { href: "/admin/bookkeeping", label: "Bookkeeping" },
     { href: "/admin/routes", label: "Routes & Rates" },
   ],

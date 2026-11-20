@@ -15,5 +15,9 @@ export function mapTruckToUi(record: DbTruck): Truck {
     crIssueDate: record.crIssueDate.toISOString().slice(0, 10),
     firstRegistrationDate: record.firstRegistrationDate.toISOString().slice(0, 10),
     isActive: record.isActive,
+    purchaseYear: record.purchaseYear,
+    purchasePrice: record.purchasePrice,
+    hasCertificate: Boolean(record.certificatePath),
+    certificateName: record.certificateName,
   };
 }

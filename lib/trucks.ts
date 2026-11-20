@@ -11,6 +11,10 @@ export interface Truck {
   crIssueDate: string;
   firstRegistrationDate: string;
   isActive: boolean;
+  purchaseYear?: number | null;
+  purchasePrice?: number | null;
+  hasCertificate?: boolean;
+  certificateName?: string | null;
 }
 
 export const trucks: Truck[] = [

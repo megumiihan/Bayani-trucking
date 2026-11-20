@@ -7,6 +7,7 @@
  * - employee-documents  PRIVATE. PhilHealth / SSS card photos and other sensitive
  *                       files; only viewable through short-lived signed URLs that
  *                       admin-only server actions create.
+ * - truck-documents     PRIVATE. Truck certificates (OR/CR etc.), same signed-URL access.
  *
  * Neither bucket has write policies: all uploads go through server actions that
  * check requireAdmin() and write with the service-role key. Safe to re-run.
@@ -22,6 +23,11 @@ import {
   EMPLOYEE_DOCUMENT_MAX_BYTES,
   EMPLOYEE_DOCUMENT_TYPES,
 } from "../lib/governmentIds";
+import {
+  TRUCK_CERTIFICATE_MAX_BYTES,
+  TRUCK_CERTIFICATE_TYPES,
+  TRUCK_DOCUMENT_BUCKET,
+} from "../lib/truckMaintenance";
 
 const buckets = [
   {
@@ -38,6 +44,14 @@ const buckets = [
       public: false,
       fileSizeLimit: EMPLOYEE_DOCUMENT_MAX_BYTES,
       allowedMimeTypes: [...EMPLOYEE_DOCUMENT_TYPES],
+    },
+  },
+  {
+    name: TRUCK_DOCUMENT_BUCKET,
+    options: {
+      public: false,
+      fileSizeLimit: Math.ceil(TRUCK_CERTIFICATE_MAX_BYTES),
+      allowedMimeTypes: [...TRUCK_CERTIFICATE_TYPES],
     },
   },
 ];

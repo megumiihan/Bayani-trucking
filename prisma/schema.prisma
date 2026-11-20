@@ -71,6 +71,8 @@ model Profile {
   loggedCollectionReceipts CollectionReceipt[]
   rateChanges              DestinationRateHistory[]
   clientRateChanges        ClientRateHistory[]
+  loggedTruckRepairs       TruckRepair[]
+  loggedTruckChecks        TruckCheck[]
 }
 
 enum AppRole {
@@ -92,10 +94,56 @@ model Truck {
   crIssueDate           DateTime
   firstRegistrationDate DateTime
   isActive              Boolean  @default(true)
+  /// Year the company bought the truck (often later than yearModel).
+  purchaseYear          Int?
+  purchasePrice         Float?
+  /// Object path in the PRIVATE `truck-documents` bucket; viewed via signed URLs.
+  certificatePath       String?
+  /// Original file name of the certificate, for display.
+  certificateName       String?
   createdAt             DateTime @default(now())
 
   shipments ShipmentLog[]
   expenses  Expense[]
+  repairs   TruckRepair[]
+  checks    TruckCheck[]
+}
+
+/// Repairs and scheduled maintenance done on a truck.
+model TruckRepair {
+  id              String   @id @default(uuid())
+  truckId         String
+  truck           Truck    @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  date            DateTime
+  /// Key from MAINTENANCE_TYPES in lib/truckMaintenance.ts (e.g. OIL_CHANGE, REPAIR).
+  maintenanceType String
+  description     String   @default("")
+  shop            String   @default("")
+  cost            Float    @default(0)
+  /// The MAINTENANCE_AND_REPAIRS expense created for this repair's cost, if any.
+  expenseId       String?  @unique
+  expense         Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+  createdById     String
+  createdBy       Profile  @relation(fields: [createdById], references: [id])
+  createdAt       DateTime @default(now())
+
+  @@index([truckId, date])
+}
+
+/// Monthly condition checklist for a truck.
+model TruckCheck {
+  id          String   @id @default(uuid())
+  truckId     String
+  truck       Truck    @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  checkedAt   DateTime
+  /// { [itemKey]: "ok" | "issue" } using CHECK_ITEMS keys from lib/truckMaintenance.ts.
+  items       Json
+  notes       String   @default("")
+  createdById String
+  createdBy   Profile  @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([truckId, checkedAt])
 }
 
 // 3. CLIENT MANAGEMENT
@@ -293,6 +341,7 @@ model Expense {
   truck        Truck?          @relation(fields: [truckId], references: [id])
   createdById  String
   createdBy    Profile         @relation(fields: [createdById], references: [id])
+  truckRepair  TruckRepair?
   createdAt    DateTime        @default(now())
 }
 
