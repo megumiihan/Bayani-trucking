@@ -29,8 +29,11 @@ import {
   getMonthKey,
 } from "@/lib/payout";
 import RecordPayoutModal from "@/components/admin/RecordPayoutModal";
+import EmployeeLoginCard from "@/components/admin/EmployeeLoginCard";
+import EmployeePhotoUpload from "@/components/admin/EmployeePhotoUpload";
+import GovernmentIdsPanel from "@/components/admin/GovernmentIdsPanel";
+import type { GovernmentIds } from "@/lib/governmentIds";
 import Badge from "@/components/ui/Badge";
-import PageHeader from "@/components/ui/PageHeader";
 
 function toDetailsForm(employee: Employee): EmployeeDetailsInput {
   return {
@@ -38,6 +41,7 @@ function toDetailsForm(employee: Employee): EmployeeDetailsInput {
     role: employee.role === "Helper" ? "Helper" : "Driver",
     bountyExp: employee.bountyExp === BOUNTY_EXP_NEW ? BOUNTY_EXP_NEW : BOUNTY_EXP_OLD,
     isActive: employee.isActive !== false,
+    isRegular: employee.isRegular === true,
   };
 }
 
@@ -45,12 +49,17 @@ interface AdminEmployeeDetailProps {
   employee: Employee;
   initialShipments: Shipment[];
   initialPayments: SalaryPaymentUi[];
+  loginEmail: string | null;
+  /** Null unless the viewer is an admin. */
+  governmentIds: GovernmentIds | null;
 }
 
 export default function AdminEmployeeDetail({
   employee,
   initialShipments,
   initialPayments,
+  loginEmail,
+  governmentIds,
 }: AdminEmployeeDetailProps) {
   const { role } = useRole();
   const [shipments, setShipments] = useState(initialShipments);
@@ -300,197 +309,246 @@ export default function AdminEmployeeDetail({
         ← Back to Employee Overview
       </Link>
 
-      <div className="mb-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <PageHeader
-              title={employee.name}
-              description={`${employee.role} · payout ledger`}
+      <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
+        {/* Profile card */}
+        <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col items-center text-center">
+            <EmployeePhotoUpload
+              key={employee.photoUrl ?? "none"}
+              employeeId={employee.id}
+              name={employee.name}
+              photoUrl={employee.photoUrl}
             />
-            <div className="flex flex-wrap gap-2">
-              <Badge label={employee.role} className="bg-blue-100 text-blue-800" />
-              <Badge
-                label={employee.isActive === false ? "Inactive" : "Active"}
-                className={
-                  employee.isActive === false
-                    ? "bg-gray-100 text-gray-600"
-                    : "bg-green-100 text-green-800"
-                }
-              />
-              <Badge
-                label={bountyExpLabel(employee.bountyExp)}
-                className={
-                  employee.bountyExp === BOUNTY_EXP_NEW
-                    ? "bg-violet-100 text-violet-800"
-                    : "bg-amber-100 text-amber-800"
-                }
-              />
-            </div>
+            <h1 className="mt-3 text-balance text-2xl font-bold tracking-tight text-slate-900">
+              {employee.name}
+            </h1>
+            <p className="text-sm text-slate-500">{employee.position}</p>
           </div>
+
           {!isEditingDetails && (
             <button
               type="button"
               onClick={startEditingDetails}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="mt-4 w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               Edit details
             </button>
           )}
-        </div>
 
-        {isEditingDetails && (
-          <form
-            onSubmit={handleSaveDetails}
-            className="mt-4 grid grid-cols-1 gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 sm:grid-cols-2 lg:grid-cols-4"
-          >
-            <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
-              Name
-              <input
-                type="text"
-                value={detailsForm.name}
-                onChange={(e) =>
-                  setDetailsForm((form) => ({ ...form, name: e.target.value }))
-                }
-                required
-                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
-              Role
-              <select
-                value={detailsForm.role}
-                onChange={(e) =>
-                  setDetailsForm((form) => ({
-                    ...form,
-                    role: e.target.value as EmployeeDetailsInput["role"],
-                  }))
-                }
-                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900"
-              >
-                <option value="Driver">Driver</option>
-                <option value="Helper">Helper</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
-              Bounty experience
-              <select
-                value={detailsForm.bountyExp}
-                onChange={(e) =>
-                  setDetailsForm((form) => ({ ...form, bountyExp: e.target.value }))
-                }
-                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900"
-              >
-                <option value={BOUNTY_EXP_OLD}>{bountyExpLabel(BOUNTY_EXP_OLD)}</option>
-                <option value={BOUNTY_EXP_NEW}>{bountyExpLabel(BOUNTY_EXP_NEW)}</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
-              Status
-              <select
-                value={detailsForm.isActive ? "active" : "inactive"}
-                onChange={(e) =>
-                  setDetailsForm((form) => ({
-                    ...form,
-                    isActive: e.target.value === "active",
-                  }))
-                }
-                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900"
-              >
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-            </label>
-            {detailsError && (
-              <p className="text-sm text-red-600 sm:col-span-2 lg:col-span-4">
-                {detailsError}
-              </p>
-            )}
-            <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
-              <button
-                type="submit"
-                disabled={isSavingDetails}
-                className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                {isSavingDetails ? "Saving…" : "Save"}
-              </button>
-              <button
-                type="button"
-                disabled={isSavingDetails}
-                onClick={() => setIsEditingDetails(false)}
-                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        )}
+          <div className="mt-5 border-t border-gray-100 pt-4">
+            <h2 className="mb-3 text-sm font-semibold text-gray-900">Profile</h2>
 
-        <div className="mt-6 space-y-4">
-          <SummaryBlock
-            title="This month"
-            subtitle={monthLabel}
-            shipments={summaries.month.shipments}
-            earned={summaries.month.earned}
-            paid={summaries.month.paid}
-            pendingEarned={summaries.month.pendingEarned}
-            pendingShipments={summaries.month.pendingShipments}
-          />
-
-          <div>
-            <button
-              type="button"
-              onClick={() => setShowLifetime((open) => !open)}
-              className="text-sm font-medium text-blue-700 hover:text-blue-800"
-            >
-              {showLifetime ? "Hide lifetime totals" : "Show lifetime totals"}
-            </button>
-            {showLifetime && (
-              <div className="mt-3">
-                <SummaryBlock
-                  title="Lifetime"
-                  subtitle="All recorded trips and payouts"
-                  shipments={summaries.lifetime.shipments}
-                  earned={summaries.lifetime.earned}
-                  paid={summaries.lifetime.paid}
-                  pendingEarned={summaries.lifetime.pendingEarned}
-                  pendingShipments={summaries.lifetime.pendingShipments}
+            {isEditingDetails ? (
+              <form onSubmit={handleSaveDetails} className="flex flex-col gap-3">
+                <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
+                  Name
+                  <input
+                    type="text"
+                    value={detailsForm.name}
+                    onChange={(e) =>
+                      setDetailsForm((form) => ({ ...form, name: e.target.value }))
+                    }
+                    required
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
+                  Role
+                  <select
+                    value={detailsForm.role}
+                    onChange={(e) =>
+                      setDetailsForm((form) => ({
+                        ...form,
+                        role: e.target.value as EmployeeDetailsInput["role"],
+                      }))
+                    }
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900"
+                  >
+                    <option value="Driver">Driver</option>
+                    <option value="Helper">Helper</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
+                  Bounty experience
+                  <select
+                    value={detailsForm.bountyExp}
+                    onChange={(e) =>
+                      setDetailsForm((form) => ({ ...form, bountyExp: e.target.value }))
+                    }
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900"
+                  >
+                    <option value={BOUNTY_EXP_OLD}>{bountyExpLabel(BOUNTY_EXP_OLD)}</option>
+                    <option value={BOUNTY_EXP_NEW}>{bountyExpLabel(BOUNTY_EXP_NEW)}</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
+                  Status
+                  <select
+                    value={detailsForm.isActive ? "active" : "inactive"}
+                    onChange={(e) =>
+                      setDetailsForm((form) => ({
+                        ...form,
+                        isActive: e.target.value === "active",
+                      }))
+                    }
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
+                  Employment
+                  <select
+                    value={detailsForm.isRegular ? "regular" : "non-regular"}
+                    onChange={(e) =>
+                      setDetailsForm((form) => ({
+                        ...form,
+                        isRegular: e.target.value === "regular",
+                      }))
+                    }
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900"
+                  >
+                    <option value="non-regular">Non-regular</option>
+                    <option value="regular">Regular</option>
+                  </select>
+                </label>
+                {detailsError && <p className="text-sm text-red-600">{detailsError}</p>}
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={isSavingDetails}
+                    className="flex-1 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {isSavingDetails ? "Saving…" : "Save"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSavingDetails}
+                    onClick={() => setIsEditingDetails(false)}
+                    className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <dl className="space-y-2.5">
+                <InfoRow icon={<RoleIcon />} label="Role" value={employee.role} />
+                <InfoRow
+                  icon={<StatusIcon />}
+                  label="Status"
+                  value={
+                    <span
+                      className={
+                        employee.isActive === false ? "text-gray-500" : "text-green-700"
+                      }
+                    >
+                      {employee.isActive === false ? "Inactive" : "Active"}
+                    </span>
+                  }
                 />
-              </div>
+                <InfoRow
+                  icon={<IdCardIcon />}
+                  label="Employment"
+                  value={employee.isRegular ? "Regular" : "Non-regular"}
+                />
+                <InfoRow
+                  icon={<StarIcon />}
+                  label="Bounty"
+                  value={bountyExpLabel(employee.bountyExp)}
+                />
+              </dl>
             )}
           </div>
-        </div>
+        </section>
 
-        <div className="mt-6 max-w-2xl">
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-gray-500">
-              Admin Remarks
-            </span>
-            <textarea
-              rows={3}
-              value={remarks}
-              onChange={(e) => {
-                setRemarks(e.target.value);
-                setIsDirty(true);
-                setSaveError(null);
-              }}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+        {/* Earnings card */}
+        <section className="flex flex-col rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-6 py-4">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Earnings</h2>
+              <p className="text-sm text-gray-500">
+                {showLifetime ? "All recorded trips and payouts" : monthLabel}
+              </p>
+            </div>
+            <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 text-xs font-medium">
+              {[
+                { key: false, label: "This month" },
+                { key: true, label: "Lifetime" },
+              ].map((opt) => (
+                <button
+                  key={opt.label}
+                  type="button"
+                  onClick={() => setShowLifetime(opt.key)}
+                  className={`rounded-md px-3 py-1 ${
+                    showLifetime === opt.key
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="px-6 py-4">
+            <SummaryBlock
+              {...(showLifetime ? summaries.lifetime : summaries.month)}
             />
-          </label>
-          {saveError && (
-            <p className="mt-2 text-sm text-red-600">{saveError}</p>
-          )}
-          {isDirty && (
-            <button
-              type="button"
-              onClick={handleSaveRemarks}
-              disabled={isSavingRemarks}
-              className="mt-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
-            >
-              {isSavingRemarks ? "Saving…" : "Save Remarks"}
-            </button>
-          )}
-        </div>
+          </div>
+
+          <div className="border-t border-gray-100 px-6 py-4">
+            <EmployeeLoginCard
+              key={employee.id}
+              employeeId={employee.id}
+              employeeName={employee.name}
+              isActive={employee.isActive !== false}
+              initialLoginEmail={loginEmail}
+              embedded
+            />
+          </div>
+
+          <div className="flex flex-1 flex-col border-t border-gray-100 px-6 py-4">
+            <label className="flex flex-1 flex-col">
+              <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-gray-500">
+                Admin Remarks
+              </span>
+              <textarea
+                rows={2}
+                placeholder="Notes about this employee…"
+                value={remarks}
+                onChange={(e) => {
+                  setRemarks(e.target.value);
+                  setIsDirty(true);
+                  setSaveError(null);
+                }}
+                className="min-h-[4.5rem] w-full flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </label>
+            {saveError && <p className="mt-2 text-sm text-red-600">{saveError}</p>}
+            {isDirty && (
+              <button
+                type="button"
+                onClick={handleSaveRemarks}
+                disabled={isSavingRemarks}
+                className="mt-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+              >
+                {isSavingRemarks ? "Saving…" : "Save Remarks"}
+              </button>
+            )}
+          </div>
+        </section>
       </div>
+
+      {employee.isRegular && governmentIds && (
+        <GovernmentIdsPanel
+          key={employee.id}
+          employeeId={employee.id}
+          initialIds={governmentIds}
+        />
+      )}
 
       <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-gray-100 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -780,16 +838,12 @@ function LedgerRow({
 }
 
 function SummaryBlock({
-  title,
-  subtitle,
   shipments,
   earned,
   paid,
   pendingEarned,
   pendingShipments,
 }: {
-  title: string;
-  subtitle: string;
   shipments: number;
   earned: number;
   paid: number;
@@ -798,24 +852,21 @@ function SummaryBlock({
 }) {
   return (
     <div>
-      <div className="mb-2">
-        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-        <p className="text-xs text-gray-500">{subtitle}</p>
-      </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <SummaryStat label="Shipments" value={String(shipments)} />
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        <SummaryStat label="Shipments" value={String(shipments)} accent="bg-blue-500" />
         <SummaryStat
-          label="Earned (Approved)"
+          label="Earned (approved)"
           value={formatCurrency(earned)}
-          subtext={
-            pendingEarned && pendingEarned > 0
-              ? `+ ${formatCurrency(pendingEarned)} pending (${pendingShipments} unapproved)`
-              : undefined
-          }
-          subtextTone="amber"
+          accent="bg-green-500"
         />
-        <SummaryStat label="Paid" value={formatCurrency(paid)} />
+        <SummaryStat label="Paid" value={formatCurrency(paid)} accent="bg-slate-400" />
       </div>
+      {pendingEarned !== undefined && pendingEarned > 0 && (
+        <p className="mt-4 text-xs font-medium text-amber-700">
+          + {formatCurrency(pendingEarned)} pending approval ({pendingShipments}{" "}
+          unapproved)
+        </p>
+      )}
     </div>
   );
 }
@@ -823,30 +874,89 @@ function SummaryBlock({
 function SummaryStat({
   label,
   value,
-  subtext,
-  subtextTone,
+  accent,
 }: {
   label: string;
   value: string;
-  subtext?: string;
-  subtextTone?: "amber" | "gray";
+  accent: string;
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-center">
-      <p className="text-xs font-medium uppercase tracking-wider text-gray-500">
-        {label}
-      </p>
-      <p className="mt-1 text-xl font-bold text-gray-900">{value}</p>
-      {subtext && (
-        <p
-          className={`mt-1 text-xs font-medium ${
-            subtextTone === "amber" ? "text-amber-700" : "text-gray-500"
-          }`}
-        >
-          {subtext}
-        </p>
-      )}
+    <div>
+      <p className="text-xs font-medium text-gray-500">{label}</p>
+      <p className="mt-1 text-2xl font-bold tabular-nums text-gray-900">{value}</p>
+      <div className={`mt-1.5 h-0.5 w-full max-w-[10rem] rounded-full ${accent}`} />
     </div>
+  );
+}
+
+function InfoRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-2.5 text-sm">
+      <span className="mt-0.5 shrink-0 text-gray-400">{icon}</span>
+      <dt className="shrink-0 text-gray-500">{label}</dt>
+      <dd className="min-w-0 font-semibold text-gray-900">{value}</dd>
+    </div>
+  );
+}
+
+function IconSvg({ children }: { children: React.ReactNode }) {
+  return (
+    <svg
+      className="h-4 w-4"
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={1.75}
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {children}
+    </svg>
+  );
+}
+
+function RoleIcon() {
+  return (
+    <IconSvg>
+      <path d="M3 6h11v10H3zM14 10h4l3 3v3h-7z" />
+      <circle cx="7" cy="18" r="1.75" />
+      <circle cx="17" cy="18" r="1.75" />
+    </IconSvg>
+  );
+}
+
+function StatusIcon() {
+  return (
+    <IconSvg>
+      <path d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+    </IconSvg>
+  );
+}
+
+function IdCardIcon() {
+  return (
+    <IconSvg>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <circle cx="9" cy="11" r="2" />
+      <path d="M6 16c.5-1.3 1.6-2 3-2s2.5.7 3 2M14 10h4M14 13h3" />
+    </IconSvg>
+  );
+}
+
+function StarIcon() {
+  return (
+    <IconSvg>
+      <path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6l-5.4 2.9 1.2-6-4.5-4.2 6.1-.7L12 3z" />
+    </IconSvg>
   );
 }
 

@@ -4,9 +4,9 @@
  *   npx tsx scripts/provision-employees.ts            # show what would be created
  *   npx tsx scripts/provision-employees.ts --commit   # actually create the accounts
  *
- * Passwords are shown once, here, and are not recoverable afterwards — print the
- * table or copy it before closing the terminal. Re-running is safe: employees who
- * already have a profile are skipped.
+ * Passwords are stored encrypted (CREDENTIALS_ENCRYPTION_KEY) so admins can look
+ * them up in the dashboard. Re-running is safe: employees who already have a
+ * profile are skipped. For a single new hire, use Admin → Employees → Add employee.
  *
  * When rebuilding against a fresh Supabase project, pass a file of already-issued
  * credentials so drivers keep the passwords they were given:
@@ -17,48 +17,11 @@
  * are derived from names and so come out the same on a new project; anyone missing
  * from the file just gets a fresh password.
  */
-import { createClient } from "@supabase/supabase-js";
 import { PrismaClient } from "@prisma/client";
-import { randomInt } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { makeEmail, makePassword, provisionLogin } from "../lib/employeeAccounts";
 
 const prisma = new PrismaClient();
-
-const EMAIL_DOMAIN = "bayanitrucking.local";
-
-const ANIMALS = [
-  "Tamaraw", "Carabao", "Tarsier", "Eagle", "Heron", "Falcon", "Dolphin",
-  "Marlin", "Gecko", "Python", "Mynah", "Parrot", "Turtle", "Panther",
-  "Bison", "Otter", "Badger", "Cobra", "Osprey", "Kingfisher", "Stallion",
-  "Barracuda", "Manta", "Pelican", "Jaguar", "Lynx", "Ibis", "Condor",
-];
-
-function makePassword() {
-  const animal = ANIMALS[randomInt(ANIMALS.length)];
-  return `${animal}-${randomInt(1000, 10000)}`;
-}
-
-function makeEmail(fullName: string, taken: Set<string>) {
-  const firstName =
-    fullName.trim().split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ||
-    "driver";
-
-  const preferred = `${firstName}@${EMAIL_DOMAIN}`;
-  if (!taken.has(preferred)) {
-    taken.add(preferred);
-    return preferred;
-  }
-
-  // Same first name as an existing account — disambiguate with a number.
-  for (let suffix = 2; suffix < 100; suffix += 1) {
-    const email = `${firstName}${suffix}@${EMAIL_DOMAIN}`;
-    if (!taken.has(email)) {
-      taken.add(email);
-      return email;
-    }
-  }
-  throw new Error(`Could not generate a unique email for ${fullName}`);
-}
 
 function loadKnownPasswords(): Map<string, string> {
   const flag = process.argv.indexOf("--passwords");
@@ -125,37 +88,17 @@ async function main() {
 
   for (const person of planned) {
     if (commit) {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      if (!url || !serviceKey) {
-        throw new Error(
-          "NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in .env"
+      try {
+        await provisionLogin(prisma, person, {
+          email: person.email,
+          password: person.password,
+        });
+      } catch (error) {
+        console.error(
+          `  ${person.fullName}: FAILED — ${error instanceof Error ? error.message : error}`
         );
-      }
-
-      const admin = createClient(url, serviceKey, {
-        auth: { autoRefreshToken: false, persistSession: false },
-      });
-
-      const { data, error } = await admin.auth.admin.createUser({
-        email: person.email,
-        password: person.password,
-        email_confirm: true,
-      });
-
-      if (error || !data.user) {
-        console.error(`  ${person.fullName}: FAILED — ${error?.message}`);
         continue;
       }
-
-      await prisma.profile.create({
-        data: {
-          id: data.user.id,
-          email: person.email,
-          role: "EMPLOYEE",
-          employeeId: person.id,
-        },
-      });
     }
 
     rows.push({
@@ -173,7 +116,7 @@ async function main() {
     const fresh = rows.filter((row) => row.Source === "new").length;
     console.log(
       `\nCreated ${rows.length} account(s), ${fresh} with a new password. ` +
-        "Passwords are not stored anywhere — copy this table now."
+        "Passwords are also stored encrypted; admins can view them on each employee's page."
     );
   }
 }

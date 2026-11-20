@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { getEmployeeById } from "@/lib/queries/employees";
+import { getEmployeeById, getEmployeeLoginEmail } from "@/lib/queries/employees";
+import { getGovernmentIds } from "@/lib/queries/governmentIds";
 import { getSalaryPaymentsForEmployee } from "@/lib/queries/payments";
 import { getShipments } from "@/lib/queries/shipments";
 import AdminEmployeeDetail from "@/components/views/AdminEmployeeDetail";
@@ -15,10 +16,12 @@ export default async function EmployeeDetailPage({
 }: EmployeeDetailPageProps) {
   const { id } = await params;
 
-  const [employee, shipments, payments] = await Promise.all([
+  const [employee, shipments, payments, loginEmail, governmentIds] = await Promise.all([
     getEmployeeById(id),
     getShipments(),
     getSalaryPaymentsForEmployee(id),
+    getEmployeeLoginEmail(id),
+    getGovernmentIds(id),
   ]);
 
   if (!employee) {
@@ -30,6 +33,8 @@ export default async function EmployeeDetailPage({
       employee={employee}
       initialShipments={shipments}
       initialPayments={payments}
+      loginEmail={loginEmail}
+      governmentIds={governmentIds}
     />
   );
 }

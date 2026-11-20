@@ -22,6 +22,10 @@ export interface Employee {
   remarks: string;
   bountyExp?: string;
   isActive?: boolean;
+  /** Public URL of the employee's photo, or null when none is set. */
+  photoUrl?: string | null;
+  /** Regular (permanent) employee. Government IDs are NOT on this type; see lib/governmentIds.ts. */
+  isRegular?: boolean;
 }
 
 export interface Shipment {

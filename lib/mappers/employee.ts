@@ -1,5 +1,6 @@
 import type { Employee as DbEmployee, EmployeeRole as DbRole } from "@prisma/client";
 import type { Employee, EmployeeRole } from "@/lib/mockData";
+import { employeePhotoUrl } from "@/lib/employeePhotos";
 
 function toUiRole(role: DbRole): EmployeeRole {
   if (role === "HELPER") return "Helper";
@@ -24,5 +25,7 @@ export function mapEmployeeToUi(record: DbEmployee): Employee {
     isActive: record.isActive,
     remarks: record.remarks ?? "",
     bountyExp: record.bountyExp,
+    photoUrl: employeePhotoUrl(record.photoPath),
+    isRegular: record.isRegular,
   };
 }

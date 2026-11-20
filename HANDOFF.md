@@ -45,9 +45,37 @@ unique constraint did not apply — see Schema notes.
 
 ## Accounts
 
-Logins are created by script, never by signup, because each auth user also needs a
-`Profile` row to carry its role. Creating one without the other produces a user who can
-sign in but has no permissions.
+**Day to day, the admin does this in the app** (Admin → Employees):
+
+- **Add employee**: adds them to the roster and, by default, creates their login. The
+  generated login and password are shown right after saving.
+- **View all logins**: every employee's login and password, for troubleshooting.
+- **Employee page → App login**: show/copy the password, **Reset password** (the old one
+  stops working immediately), or **Create login** for someone who has none.
+
+Driver emails use the `@bayanitrucking.local` domain, which is not real, so Supabase's
+"forgot password" emails never arrive. The admin is the recovery path: look the
+password up, or reset it. The login screen tells employees to ask the office.
+
+Passwords are stored AES-256-GCM encrypted in `Profile.encryptedPassword`
+(`lib/credentialCrypto.ts`). Two server-only env vars must be set locally **and in
+Vercel**, with the same values:
+
+- `SUPABASE_SERVICE_ROLE_KEY`: creates logins and resets passwords.
+- `CREDENTIALS_ENCRYPTION_KEY`: 32 random bytes, base64 (`openssl rand -base64 32`).
+  If it's lost, stored passwords become unreadable. Logins still work; the admin
+  resets them. Keep a copy in a password manager.
+
+Logins created before password storage existed show "not on file" until reset, or
+until backfilled from the original credentials file:
+
+```bash
+npx tsx scripts/store-known-passwords.ts creds.local.json            # dry run
+npx tsx scripts/store-known-passwords.ts creds.local.json --commit
+```
+
+Scripts remain for admins and bulk/rebuild work. Each auth user needs a `Profile`
+row to carry its role, so logins are never created by signup:
 
 ```bash
 npx tsx scripts/provision-user.ts admin@example.com 'password' admin
@@ -55,10 +83,8 @@ npx tsx scripts/provision-employees.ts            # dry run, prints the table
 npx tsx scripts/provision-employees.ts --commit   # actually creates them
 ```
 
-Both scripts skip accounts that already exist, so rerunning after a new hire only creates
-the missing ones. Driver emails use the `@bayanitrucking.local` domain, which is not a
-real domain — password resets by email will not work, and the office resets passwords
-from the Supabase dashboard instead. Move to a domain you own if that becomes a problem.
+Both scripts skip accounts that already exist. Login creation logic is shared with the
+app in `lib/employeeAccounts.ts`.
 
 ---
 

@@ -16,3 +16,13 @@ export async function getEmployeeById(id: string) {
 
   return record ? mapEmployeeToUi(record) : null;
 }
+
+/** Email of the employee's app login, or null if they have none. */
+export async function getEmployeeLoginEmail(employeeId: string) {
+  const profile = await prisma.profile.findUnique({
+    where: { employeeId },
+    select: { email: true },
+  });
+
+  return profile?.email ?? null;
+}

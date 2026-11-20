@@ -105,6 +105,9 @@ export default function LoginScreen() {
           >
             {isSubmitting ? "Signing in…" : "Sign in"}
           </button>
+          <p className="text-center text-xs text-gray-500">
+            Forgot your password? Ask the office admin to look it up or reset it.
+          </p>
         </form>
 
         <p className="mt-6 text-center text-xs text-gray-400">

@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
   // Pooled connection, used at runtime by the app.
   url       = env("DATABASE_URL")
   // Unpooled connection, used by `prisma db push` and `migrate`, which
@@ -16,20 +16,30 @@ datasource db {
 
 // 1. EMPLOYEES TABLE (Master list of drivers & helpers)
 model Employee {
-  id        String       @id @default(uuid())
-  fullName  String
-  role      EmployeeRole // DRIVER, HELPER, BOTH
-  isActive  Boolean      @default(true) // Set to false if they resign
-  remarks   String?
+  id                 String       @id @default(uuid())
+  fullName           String
+  role               EmployeeRole // DRIVER, HELPER, BOTH
+  isActive           Boolean      @default(true) // Set to false if they resign
+  remarks            String?
   /// Bounty experience tag, e.g. oldbounty / newbounty.
-  bountyExp String       @default("oldbounty")
-  createdAt DateTime     @default(now())
+  bountyExp          String       @default("oldbounty")
+  /// Object path in the `employee-photos` storage bucket, e.g. "<id>/1732000000000.webp".
+  photoPath          String?
+  /// Regular (permanent) employee. Only regulars carry PhilHealth / SSS details.
+  isRegular          Boolean      @default(false)
+  /// Government IDs. Sensitive: read only via lib/queries/governmentIds.ts (admin).
+  philhealthNumber   String?
+  sssNumber          String?
+  /// Object paths in the PRIVATE `employee-documents` bucket; viewed via signed URLs.
+  philhealthCardPath String?
+  sssCardPath        String?
+  createdAt          DateTime     @default(now())
 
   // Optional: Allows querying all shipments completed by this employee
-  driverShipments ShipmentLog[] @relation("DriverRelation")
-  helperShipments ShipmentLog[] @relation("HelperRelation")
-  profile         Profile?
-  salaryPayments  SalaryPayment[]
+  driverShipments     ShipmentLog[]   @relation("DriverRelation")
+  helperShipments     ShipmentLog[]   @relation("HelperRelation")
+  profile             Profile?
+  salaryPayments      SalaryPayment[]
   responsibleExpenses Expense[]
 }
 
@@ -42,22 +52,25 @@ enum EmployeeRole {
 // 1b. PROFILES (one row per Supabase Auth user)
 model Profile {
   /// Matches the Supabase `auth.users.id` for this person.
-  id         String    @id
-  email      String    @unique
-  role       AppRole   @default(EMPLOYEE)
+  id                String    @id
+  email             String    @unique
+  role              AppRole   @default(EMPLOYEE)
   /// Null for office staff who are not drivers or helpers.
-  employeeId String?   @unique
-  employee   Employee? @relation(fields: [employeeId], references: [id])
-  createdAt  DateTime  @default(now())
+  employeeId        String?   @unique
+  employee          Employee? @relation(fields: [employeeId], references: [id])
+  /// AES-256-GCM ciphertext of the login password (iv:tag:data, base64) so the
+  /// admin can look it up. Key: CREDENTIALS_ENCRYPTION_KEY. Null = not on file.
+  encryptedPassword String?
+  createdAt         DateTime  @default(now())
 
-  createdShipments           ShipmentLog[]
-  recordedPayments           SalaryPayment[]
-  loggedExpenses             Expense[]
-  loggedBillables            Billable[]
-  loggedDisbursements        Disbursement[]
-  loggedCollectionReceipts   CollectionReceipt[]
-  rateChanges                DestinationRateHistory[]
-  clientRateChanges          ClientRateHistory[]
+  createdShipments         ShipmentLog[]
+  recordedPayments         SalaryPayment[]
+  loggedExpenses           Expense[]
+  loggedBillables          Billable[]
+  loggedDisbursements      Disbursement[]
+  loggedCollectionReceipts CollectionReceipt[]
+  rateChanges              DestinationRateHistory[]
+  clientRateChanges        ClientRateHistory[]
 }
 
 enum AppRole {
@@ -90,19 +103,19 @@ model Client {
   id                 String          @id @default(uuid())
   name               String          @unique
   calcType           CalculationType @default(DESTINATION)
-  pigheadDriverRate   Float?
-  pigheadHelperRate   Float?
-  platformShare       Float?
-  platformDriverRate  Float?
-  platformHelperRate  Float?
-  createdAt           DateTime        @default(now())
+  pigheadDriverRate  Float?
+  pigheadHelperRate  Float?
+  platformShare      Float?
+  platformDriverRate Float?
+  platformHelperRate Float?
+  createdAt          DateTime        @default(now())
 
-  routes           DestinationRoute[]
-  shipments        ShipmentLog[]
-  rateHistory      DestinationRateHistory[]
-  clientRateHistory ClientRateHistory[]
-  billables            Billable[]
-  collectionReceipts   CollectionReceipt[]
+  routes             DestinationRoute[]
+  shipments          ShipmentLog[]
+  rateHistory        DestinationRateHistory[]
+  clientRateHistory  ClientRateHistory[]
+  billables          Billable[]
+  collectionReceipts CollectionReceipt[]
 }
 
 enum CalculationType {
@@ -136,22 +149,22 @@ model DestinationRoute {
 
 // Audit log when admins change destination-based route rates.
 model DestinationRateHistory {
-  id                     String            @id @default(uuid())
-  clientId               String
-  client                 Client            @relation(fields: [clientId], references: [id])
-  destinationRouteId     String?
-  destinationRoute       DestinationRoute? @relation(fields: [destinationRouteId], references: [id], onDelete: SetNull)
-  routeName              String
-  distance               String            @default("")
-  prevDriverBaseRate     Float
-  prevHelperBaseRate     Float
+  id                      String            @id @default(uuid())
+  clientId                String
+  client                  Client            @relation(fields: [clientId], references: [id])
+  destinationRouteId      String?
+  destinationRoute        DestinationRoute? @relation(fields: [destinationRouteId], references: [id], onDelete: SetNull)
+  routeName               String
+  distance                String            @default("")
+  prevDriverBaseRate      Float
+  prevHelperBaseRate      Float
   prevExtraHelperBaseRate Float
-  newDriverBaseRate      Float
-  newHelperBaseRate      Float
-  newExtraHelperBaseRate Float
-  changedById            String
-  changedBy              Profile           @relation(fields: [changedById], references: [id])
-  changedAt              DateTime          @default(now())
+  newDriverBaseRate       Float
+  newHelperBaseRate       Float
+  newExtraHelperBaseRate  Float
+  changedById             String
+  changedBy               Profile           @relation(fields: [changedById], references: [id])
+  changedAt               DateTime          @default(now())
 
   @@index([clientId, changedAt(sort: Desc)])
 }
@@ -163,23 +176,23 @@ enum ClientRateHistoryKind {
 
 // Audit log when admins change livestock or platform client-level rates.
 model ClientRateHistory {
-  id                      String                @id @default(uuid())
-  clientId                String
-  client                  Client                @relation(fields: [clientId], references: [id])
-  kind                    ClientRateHistoryKind
-  prevPigheadDriverRate   Float?
-  prevPigheadHelperRate   Float?
-  newPigheadDriverRate    Float?
-  newPigheadHelperRate    Float?
-  prevPlatformShare       Float?
-  prevPlatformDriverRate  Float?
-  prevPlatformHelperRate  Float?
-  newPlatformShare        Float?
-  newPlatformDriverRate   Float?
-  newPlatformHelperRate   Float?
-  changedById             String
-  changedBy               Profile               @relation(fields: [changedById], references: [id])
-  changedAt               DateTime              @default(now())
+  id                     String                @id @default(uuid())
+  clientId               String
+  client                 Client                @relation(fields: [clientId], references: [id])
+  kind                   ClientRateHistoryKind
+  prevPigheadDriverRate  Float?
+  prevPigheadHelperRate  Float?
+  newPigheadDriverRate   Float?
+  newPigheadHelperRate   Float?
+  prevPlatformShare      Float?
+  prevPlatformDriverRate Float?
+  prevPlatformHelperRate Float?
+  newPlatformShare       Float?
+  newPlatformDriverRate  Float?
+  newPlatformHelperRate  Float?
+  changedById            String
+  changedBy              Profile               @relation(fields: [changedById], references: [id])
+  changedAt              DateTime              @default(now())
 
   @@index([clientId, kind, changedAt(sort: Desc)])
 }
@@ -199,12 +212,12 @@ model ShipmentLog {
   waybillNumber  String?
 
   // --- Dynamic Input Fields ---
-  routeName  String?
-  distance   String?
-  weightKg   Float?
-  headCount  Int?
-  pigheadCount   Int?
-  platformRate   Float?
+  routeName    String?
+  distance     String?
+  weightKg     Float?
+  headCount    Int?
+  pigheadCount Int?
+  platformRate Float?
 
   // --- Personnel Involved ---
   driverName String // Snapshot driver name
@@ -225,8 +238,8 @@ model ShipmentLog {
   helperPayout      Float
   extraHelperPayout Float @default(0.0)
 
-  remarks   String?
-  isFlagged Boolean @default(false)
+  remarks    String?
+  isFlagged  Boolean @default(false)
   isApproved Boolean @default(false)
 
   clientId    String
@@ -238,12 +251,12 @@ model ShipmentLog {
 
 // 6. SALARY PAYMENTS (cash paid to a crew member)
 model SalaryPayment {
-  id         String   @id @default(uuid())
-  employeeId String
-  employee   Employee @relation(fields: [employeeId], references: [id])
-  amount     Float
-  paidAt     DateTime
-  note       String?
+  id          String   @id @default(uuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  amount      Float
+  paidAt      DateTime
+  note        String?
   createdById String
   createdBy   Profile  @relation(fields: [createdById], references: [id])
   createdAt   DateTime @default(now())
@@ -261,26 +274,26 @@ enum ExpenseCategory {
 }
 
 model Expense {
-  id          String          @id @default(uuid())
-  date        DateTime
-  category    ExpenseCategory
-  amount      Float
-  address     String          @default("")
-  invoiceNo   String          @default("")
-  vatRegNo    String          @default("")
-  vatPurchase Float           @default(0)
-  inputTax    Float           @default(0)
-  description String?
-  isFlagged   Boolean         @default(false)
-  isReimbursed Boolean        @default(false)
-  isCredit     Boolean        @default(false)
+  id           String          @id @default(uuid())
+  date         DateTime
+  category     ExpenseCategory
+  amount       Float
+  address      String          @default("")
+  invoiceNo    String          @default("")
+  vatRegNo     String          @default("")
+  vatPurchase  Float           @default(0)
+  inputTax     Float           @default(0)
+  description  String?
+  isFlagged    Boolean         @default(false)
+  isReimbursed Boolean         @default(false)
+  isCredit     Boolean         @default(false)
   employeeId   String?
-  employee     Employee?      @relation(fields: [employeeId], references: [id])
+  employee     Employee?       @relation(fields: [employeeId], references: [id])
   truckId      String?
-  truck        Truck?         @relation(fields: [truckId], references: [id])
-  createdById String
-  createdBy   Profile         @relation(fields: [createdById], references: [id])
-  createdAt   DateTime        @default(now())
+  truck        Truck?          @relation(fields: [truckId], references: [id])
+  createdById  String
+  createdBy    Profile         @relation(fields: [createdById], references: [id])
+  createdAt    DateTime        @default(now())
 }
 
 // 8. BOOKKEEPING LEDGERS
@@ -326,7 +339,7 @@ model CollectionReceipt {
   id               String   @id @default(uuid())
   datePaid         DateTime
   orNumber         String   @unique
-  collectionAmount Float @map("amount")
+  collectionAmount Float    @map("amount")
   paymentDetails   String   @default("")
   whoPaid          String
   whoReceived      String
