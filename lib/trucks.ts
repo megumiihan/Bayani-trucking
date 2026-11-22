@@ -13,6 +13,8 @@ export interface Truck {
   isActive: boolean;
   purchaseYear?: number | null;
   purchasePrice?: number | null;
+  /** Year sold; set on inactive trucks. */
+  soldYear?: number | null;
   hasCertificate?: boolean;
   certificateName?: string | null;
 }

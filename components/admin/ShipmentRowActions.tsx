@@ -10,6 +10,8 @@ interface ShipmentRowActionsProps {
   onToggleApprove: () => void;
   onToggleFlag: () => void;
   onDelete: () => void;
+  /** Secretary: the check pre-approves (yellow) and there's no delete. */
+  mode?: "admin" | "secretary";
 }
 
 const baseButton =
@@ -22,7 +24,32 @@ export default function ShipmentRowActions({
   onToggleApprove,
   onToggleFlag,
   onDelete,
+  mode = "admin",
 }: ShipmentRowActionsProps) {
+  const isSecretary = mode === "secretary";
+  const preApproved = !shipment.approved && shipment.secretaryApproved === true;
+  const yellow = `${baseButton} border-yellow-300 bg-yellow-100 text-yellow-700 hover:border-yellow-400 hover:bg-yellow-50 focus-visible:ring-yellow-300`;
+
+  const approveLabel = isSecretary
+    ? shipment.approved
+      ? "Approved by admin"
+      : preApproved
+        ? "Remove pre-approval"
+        : "Pre-approve (admin still has to approve)"
+    : shipment.approved
+      ? "Remove approval"
+      : preApproved
+        ? "Pre-approved by secretary. Click to approve"
+        : "Approve shipment";
+
+  const approveClass = shipment.approved
+    ? `${baseButton} border-emerald-200 bg-emerald-50/80 text-emerald-600 hover:border-emerald-300 hover:bg-emerald-50 focus-visible:ring-emerald-300`
+    : preApproved
+      ? yellow
+      : isSecretary
+        ? `${baseButton} border-slate-200/80 text-slate-400 hover:border-yellow-300 hover:bg-yellow-50/60 hover:text-yellow-700 focus-visible:ring-yellow-300`
+        : `${baseButton} border-slate-200/80 text-slate-400 hover:border-emerald-200 hover:bg-emerald-50/60 hover:text-emerald-600 focus-visible:ring-emerald-300`;
+
   return (
     <div className="flex items-center gap-1">
       <ActionIconButton
@@ -34,15 +61,12 @@ export default function ShipmentRowActions({
       </ActionIconButton>
 
       <ActionIconButton
-        label={shipment.approved ? "Remove approval" : "Approve shipment"}
+        label={approveLabel}
         onClick={onToggleApprove}
-        className={
-          shipment.approved
-            ? `${baseButton} border-emerald-200 bg-emerald-50/80 text-emerald-600 hover:border-emerald-300 hover:bg-emerald-50 focus-visible:ring-emerald-300`
-            : `${baseButton} border-slate-200/80 text-slate-400 hover:border-emerald-200 hover:bg-emerald-50/60 hover:text-emerald-600 focus-visible:ring-emerald-300`
-        }
+        disabled={isSecretary && shipment.approved}
+        className={approveClass}
       >
-        <CheckIcon approved={shipment.approved} />
+        <CheckIcon approved={shipment.approved && !isSecretary} />
       </ActionIconButton>
 
       <ActionIconButton
@@ -58,13 +82,15 @@ export default function ShipmentRowActions({
         {isFlagging ? <Spinner /> : <FlagIcon filled={shipment.flagged} />}
       </ActionIconButton>
 
-      <ActionIconButton
-        label="Delete shipment"
-        onClick={onDelete}
-        className={`${baseButton} border-slate-200/80 text-slate-400 hover:border-rose-200 hover:bg-rose-50/60 hover:text-rose-600 focus-visible:ring-rose-300`}
-      >
-        <TrashIcon />
-      </ActionIconButton>
+      {!isSecretary && (
+        <ActionIconButton
+          label="Delete shipment"
+          onClick={onDelete}
+          className={`${baseButton} border-slate-200/80 text-slate-400 hover:border-rose-200 hover:bg-rose-50/60 hover:text-rose-600 focus-visible:ring-rose-300`}
+        >
+          <TrashIcon />
+        </ActionIconButton>
+      )}
     </div>
   );
 }

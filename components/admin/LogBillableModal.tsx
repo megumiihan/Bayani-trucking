@@ -8,6 +8,7 @@ import {
 } from "@/lib/bookkeeping";
 import type { Client } from "@/lib/clients";
 import { formatCurrency } from "@/lib/mockData";
+import BookkeepingClientSelect, { OTHERS_CLIENT } from "@/components/admin/BookkeepingClientSelect";
 import { inputClass } from "@/components/ui/formStyles";
 import { useEscapeToClose } from "@/components/ui/useEscapeToClose";
 
@@ -39,6 +40,7 @@ export default function LogBillableModal({
   const [invoiceNo, setInvoiceNo] = useState("");
   const [vatRegNo, setVatRegNo] = useState("");
   const [clientId, setClientId] = useState("");
+  const [otherClientName, setOtherClientName] = useState("");
   const [buyerAddress, setBuyerAddress] = useState("");
   const [totalInvoiceAmt, setTotalInvoiceAmt] = useState("");
   const [vatDeduction, setVatDeduction] = useState(true);
@@ -46,6 +48,7 @@ export default function LogBillableModal({
 
   useEffect(() => {
     if (!isOpen) return;
+    setOtherClientName("");
 
     if (billable) {
       const matchingClient =
@@ -90,6 +93,17 @@ export default function LogBillableModal({
 
   if (!isOpen) return null;
 
+  const isOthers = clientId === OTHERS_CLIENT;
+
+  // Picking a client fills in their address and TIN when those are still blank.
+  const handleClientChange = (nextId: string) => {
+    setClientId(nextId);
+    const client = clients.find((c) => c.id === nextId);
+    if (!client) return;
+    if (!buyerAddress.trim() && client.address) setBuyerAddress(client.address);
+    if (!vatRegNo.trim() && client.tin) setVatRegNo(client.tin);
+  };
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (isSaving || !hasValidAmount) return;
@@ -97,7 +111,8 @@ export default function LogBillableModal({
       date,
       invoiceNo,
       vatRegNo,
-      clientId,
+      clientId: isOthers ? "" : clientId,
+      newClient: isOthers ? { name: otherClientName } : undefined,
       buyerAddress,
       totalInvoiceAmt: parsedAmount,
       vatDeduction,
@@ -162,20 +177,27 @@ export default function LogBillableModal({
               <span className="mb-1.5 block text-sm font-medium text-gray-700">
                 Buyer name
               </span>
-              <select
-                required
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Select a client</option>
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
+              <BookkeepingClientSelect clients={clients} value={clientId} onChange={handleClientChange} />
             </label>
+            {isOthers && (
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Other client&apos;s name
+                </span>
+                <input
+                  type="text"
+                  required
+                  value={otherClientName}
+                  onChange={(e) => setOtherClientName(e.target.value)}
+                  placeholder="Registered business name"
+                  className={inputClass}
+                />
+                <span className="mt-1 block text-xs text-gray-500">
+                  Saved as a one-off client with the address and VAT Reg. No. below. It shows
+                  on Clients &amp; suppliers but not on the Clients page.
+                </span>
+              </label>
+            )}
             <label className="block">
               <span className="mb-1.5 block text-sm font-medium text-gray-700">
                 Buyer address
@@ -271,6 +293,11 @@ export default function LogBillableModal({
                 label="Total tax"
                 hint="Output tax + withholding tax"
                 value={preview ? formatCurrency(preview.totalTax) : "—"}
+              />
+              <PreviewRow
+                label="Total amount due"
+                hint="Total invoice amount − withholding tax"
+                value={preview ? formatCurrency(preview.totalAmountDue) : "—"}
                 emphasize
               />
             </dl>

@@ -48,6 +48,11 @@ export function fromPrismaCalculationType(
 export interface Client {
   id: string;
   name: string;
+  legalName?: string;
+  address?: string;
+  tin?: string;
+  /** One-off client added from Bookkeeping → "Others". */
+  isTemporary?: boolean;
   calculationType: CalculationType;
   pigheadDriverRate?: number | null;
   pigheadHelperRate?: number | null;

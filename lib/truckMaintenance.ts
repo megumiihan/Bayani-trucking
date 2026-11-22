@@ -2,9 +2,12 @@
  * Truck maintenance rules: scheduled maintenance types, the monthly condition
  * checklist, and how "due" is worked out. Client-safe; no database access.
  *
+ * Types and check items live in the database (MaintenanceType, TruckCheckItem)
+ * and are edited by admins on the Trucks page. The defaults below seed an empty
+ * database. Removed entries are archived, not deleted, so history keeps labels.
+ *
  * Due dates are time-based only: each scheduled type repeats every
  * `intervalMonths` after the last repair of that type was logged.
- * Edit the lists below to change the schedule.
  */
 
 export interface MaintenanceType {
@@ -15,10 +18,35 @@ export interface MaintenanceType {
   /** Mandatory items show as "Maintenance due"; the rest as "Check recommended". */
   mandatory: boolean;
   /** Only applies to refrigerated trucks. */
-  reeferOnly?: boolean;
+  reeferOnly: boolean;
+  /** Removed by an admin. Kept only so old repairs still show their label. */
+  archived: boolean;
 }
 
-export const MAINTENANCE_TYPES: MaintenanceType[] = [
+export interface CheckItem {
+  key: string;
+  label: string;
+  reeferOnly: boolean;
+  /** Removed by an admin. Kept only so old checks still show their label. */
+  archived: boolean;
+}
+
+export interface MaintenanceConfig {
+  /** All types, archived included, in display order. */
+  types: MaintenanceType[];
+  /** All check items, archived included, in display order. */
+  checkItems: CheckItem[];
+}
+
+/** The unscheduled catch-all type. Always present; can't be removed or scheduled. */
+export const REPAIR_TYPE_KEY = "REPAIR";
+
+/** Longest interval an admin can set, in months. */
+export const MAX_INTERVAL_MONTHS = 120;
+
+type Default<T> = Omit<T, "archived" | "reeferOnly"> & { reeferOnly?: boolean };
+
+export const DEFAULT_MAINTENANCE_TYPES: Default<MaintenanceType>[] = [
   { key: "OIL_CHANGE", label: "Change oil & filter", intervalMonths: 3, mandatory: true },
   { key: "PMS", label: "Preventive maintenance (PMS)", intervalMonths: 6, mandatory: true },
   { key: "BRAKES", label: "Brake service", intervalMonths: 6, mandatory: true },
@@ -26,22 +54,10 @@ export const MAINTENANCE_TYPES: MaintenanceType[] = [
   { key: "REEFER", label: "Reefer unit service", intervalMonths: 6, mandatory: true, reeferOnly: true },
   { key: "TIRES", label: "Tire rotation / replacement", intervalMonths: 6, mandatory: false },
   { key: "AIRCON", label: "Cab aircon cleaning", intervalMonths: 12, mandatory: false },
-  { key: "REPAIR", label: "Repair (unscheduled)", intervalMonths: null, mandatory: false },
+  { key: REPAIR_TYPE_KEY, label: "Repair (unscheduled)", intervalMonths: null, mandatory: false },
 ];
 
-export const MAINTENANCE_TYPE_KEYS = MAINTENANCE_TYPES.map((type) => type.key);
-
-export function maintenanceTypeLabel(key: string): string {
-  return MAINTENANCE_TYPES.find((type) => type.key === key)?.label ?? key;
-}
-
-export interface CheckItem {
-  key: string;
-  label: string;
-  reeferOnly?: boolean;
-}
-
-export const CHECK_ITEMS: CheckItem[] = [
+export const DEFAULT_CHECK_ITEMS: Default<CheckItem>[] = [
   { key: "tires", label: "Tires & air pressure" },
   { key: "brakes", label: "Brakes" },
   { key: "lights", label: "Lights & signals" },
@@ -56,6 +72,10 @@ export const CHECK_ITEMS: CheckItem[] = [
   { key: "documents", label: "OR/CR & documents in truck" },
 ];
 
+export function maintenanceTypeLabel(types: MaintenanceType[], key: string): string {
+  return types.find((type) => type.key === key)?.label ?? key;
+}
+
 export type CheckResult = "ok" | "issue";
 export type CheckItems = Record<string, CheckResult>;
 
@@ -63,14 +83,16 @@ export function isReefer(truckType: string): boolean {
   return /reefer/i.test(truckType);
 }
 
-export function maintenanceTypesFor(truckType: string): MaintenanceType[] {
+/** Active types that apply to this truck. */
+export function maintenanceTypesFor(types: MaintenanceType[], truckType: string): MaintenanceType[] {
   const reefer = isReefer(truckType);
-  return MAINTENANCE_TYPES.filter((type) => !type.reeferOnly || reefer);
+  return types.filter((type) => !type.archived && (!type.reeferOnly || reefer));
 }
 
-export function checkItemsFor(truckType: string): CheckItem[] {
+/** Active check items that apply to this truck. */
+export function checkItemsFor(items: CheckItem[], truckType: string): CheckItem[] {
   const reefer = isReefer(truckType);
-  return CHECK_ITEMS.filter((item) => !item.reeferOnly || reefer);
+  return items.filter((item) => !item.archived && (!item.reeferOnly || reefer));
 }
 
 /** Dates are "YYYY-MM-DD" strings throughout. */
@@ -110,11 +132,12 @@ export interface ScheduleStatus {
  * `lastDoneByType` maps maintenance type key → latest repair date.
  */
 export function getScheduleStatus(
+  types: MaintenanceType[],
   truckType: string,
   lastDoneByType: Record<string, string | undefined>,
   today = todayISO()
 ): ScheduleStatus[] {
-  return maintenanceTypesFor(truckType)
+  return maintenanceTypesFor(types, truckType)
     .filter((type) => type.intervalMonths !== null)
     .map((type) => {
       const lastDone = lastDoneByType[type.key] ?? null;
@@ -153,20 +176,44 @@ export function formatShortDate(date: string): string {
 
 /**
  * Everything on a truck that needs attention, most urgent first.
- * - required: overdue mandatory maintenance, or issues from the latest check
+ * - required: overdue mandatory maintenance, overdue document renewals, or
+ *             issues from the latest check
  * - check:    mandatory maintenance due soon or never logged, overdue optional
- *             maintenance, and this month's condition check not yet done
+ *             maintenance, document renewals due within RENEWAL_SOON_DAYS, and
+ *             this month's condition check not yet done
  */
 export function getTruckAlerts(
+  config: MaintenanceConfig,
   truckType: string,
   lastDoneByType: Record<string, string | undefined>,
   latestCheck: MonthlyCheckSummary | null,
+  /** Document type key → renewal due date. */
+  documentDueDates: Record<string, string | undefined> = {},
   today = todayISO()
 ): TruckAlert[] {
   const alerts: TruckAlert[] = [];
+
+  for (const doc of TRUCK_DOCUMENT_TYPES) {
+    const due = documentDueDates[doc.key];
+    if (!due) continue;
+    const { state, daysLeft } = renewalState(due, today);
+    if (state === "overdue") {
+      alerts.push({
+        level: "required",
+        label: `${doc.label} renewal`,
+        detail: `Overdue by ${-daysLeft} day${daysLeft === -1 ? "" : "s"} (due ${formatShortDate(due)})`,
+      });
+    } else if (state === "due-soon") {
+      alerts.push({
+        level: "check",
+        label: `${doc.label} renewal`,
+        detail: daysLeft === 0 ? "Due today" : `Due in ${daysLeft} day${daysLeft === 1 ? "" : "s"} (${formatShortDate(due)})`,
+      });
+    }
+  }
   const neverLogged: string[] = [];
 
-  for (const status of getScheduleStatus(truckType, lastDoneByType, today)) {
+  for (const status of getScheduleStatus(config.types, truckType, lastDoneByType, today)) {
     const { type, state, daysLeft, nextDue } = status;
     if (state === "overdue") {
       alerts.push({
@@ -194,10 +241,13 @@ export function getTruckAlerts(
   }
 
   if (latestCheck) {
-    const labels = new Map(CHECK_ITEMS.map((item) => [item.key, item.label]));
+    // Issues on a check an admin has since removed no longer raise an alert.
+    const labels = new Map(
+      config.checkItems.filter((item) => !item.archived).map((item) => [item.key, item.label])
+    );
     const issues = Object.entries(latestCheck.items)
-      .filter(([, result]) => result === "issue")
-      .map(([key]) => labels.get(key) ?? key);
+      .filter(([key, result]) => result === "issue" && labels.has(key))
+      .map(([key]) => labels.get(key)!);
     if (issues.length > 0) {
       alerts.push({
         level: "required",
@@ -218,6 +268,30 @@ export function getTruckAlerts(
   }
 
   return alerts.sort((a, b) => (a.level === b.level ? 0 : a.level === "required" ? -1 : 1));
+}
+
+/** Truck documents with a renewal due date, shown on the truck page (admins only). */
+export const TRUCK_DOCUMENT_TYPES = [
+  { key: "TITLE", label: "Title" },
+  { key: "LTFRB", label: "LTFRB franchise" },
+  { key: "NMIS", label: "NMIS accreditation" },
+  { key: "INSURANCE", label: "Comprehensive insurance" },
+] as const;
+
+export type TruckDocumentType = (typeof TRUCK_DOCUMENT_TYPES)[number]["key"];
+
+export function truckDocumentLabel(key: string): string {
+  return TRUCK_DOCUMENT_TYPES.find((type) => type.key === key)?.label ?? key;
+}
+
+/** Renewals within this many days show as "due soon". */
+export const RENEWAL_SOON_DAYS = 30;
+
+export type RenewalState = "overdue" | "due-soon" | "ok";
+
+export function renewalState(dueDate: string, today = todayISO()): { state: RenewalState; daysLeft: number } {
+  const daysLeft = daysBetween(today, dueDate);
+  return { state: daysLeft < 0 ? "overdue" : daysLeft <= RENEWAL_SOON_DAYS ? "due-soon" : "ok", daysLeft };
 }
 
 /** Private Supabase Storage bucket for truck certificates (OR/CR etc.). */

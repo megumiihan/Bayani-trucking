@@ -1,4 +1,6 @@
+import { requirePageRole } from "@/lib/auth";
 import { getClients } from "@/lib/queries/clients";
+import { getSuppliers } from "@/lib/queries/suppliers";
 import { getEmployees } from "@/lib/queries/employees";
 import { getExpenses } from "@/lib/queries/expenses";
 import {
@@ -17,6 +19,7 @@ export default async function AdminBookkeepingPage({
 }: {
   searchParams: Promise<{ ledger?: string }>;
 }) {
+  await requirePageRole(["admin"]);
   const [
     billables,
     expenses,
@@ -25,6 +28,7 @@ export default async function AdminBookkeepingPage({
     employees,
     trucks,
     clients,
+    suppliers,
   ] = await Promise.all([
     getBillables(),
     getExpenses(),
@@ -32,7 +36,8 @@ export default async function AdminBookkeepingPage({
     getCollectionReceipts(),
     getEmployees(),
     getTrucks(),
-    getClients(),
+    getClients({ includeTemporary: true }),
+    getSuppliers(),
   ]);
 
   const { ledger } = await searchParams;
@@ -51,6 +56,7 @@ export default async function AdminBookkeepingPage({
       employees={employees}
       trucks={trucks}
       clients={clients}
+      suppliers={suppliers}
     />
   );
 }

@@ -12,6 +12,11 @@ export function exportCollectionReceiptsToCsv(receipts: CollectionReceiptUi[]) {
   const header = [
     "Client",
     "OR number",
+    "SI / invoice no.",
+    "Buyer name",
+    "Buyer address",
+    "VAT Reg. No.",
+    "Total amount due",
     "Collection amount",
     "Payment details",
     "Date paid",
@@ -20,16 +25,26 @@ export function exportCollectionReceiptsToCsv(receipts: CollectionReceiptUi[]) {
     "Logged by",
   ];
 
-  const rows = receipts.map((row) => [
-    row.clientName,
-    row.orNumber,
-    row.collectionAmount.toFixed(2),
-    row.paymentDetails,
-    row.datePaid,
-    row.whoPaid,
-    row.whoReceived,
-    row.createdByName,
-  ]);
+  // One row per SI. The receipt's collection amount appears only on its first row,
+  // so summing the column in Excel gives the true total.
+  const rows = receipts.flatMap((row) => {
+    const items = row.items.length > 0 ? row.items : [null];
+    return items.map((item, index) => [
+      row.clientName,
+      row.orNumber,
+      item?.invoiceNo ?? "",
+      item?.buyerName ?? "",
+      item?.buyerAddress ?? "",
+      item?.vatRegNo ?? "",
+      item ? item.amountDue.toFixed(2) : "",
+      index === 0 ? row.collectionAmount.toFixed(2) : "",
+      row.paymentDetails,
+      row.datePaid,
+      row.whoPaid,
+      row.whoReceived,
+      row.createdByName,
+    ]);
+  });
 
   const csv = [header, ...rows]
     .map((row) => row.map(csvCell).join(","))

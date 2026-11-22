@@ -158,9 +158,17 @@ export default function AddEmployeeModal({ isOpen, onClose, onCreated }: AddEmpl
                 >
                   <option value="Driver">Driver</option>
                   <option value="Helper">Helper</option>
+                  <option value="Secretary">Secretary</option>
                 </select>
+                {form.role === "Secretary" && (
+                  <span className="mt-1.5 block text-xs text-gray-500">
+                    Logs and edits shipments and payouts, sees employees and trucks. Never
+                    assigned to a shipment and can&apos;t see payout totals.
+                  </span>
+                )}
               </label>
 
+              {form.role !== "Secretary" && (
               <label className="block">
                 <span className="mb-1.5 block text-sm font-medium text-gray-700">
                   Bounty experience
@@ -174,6 +182,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onCreated }: AddEmpl
                   <option value={BOUNTY_EXP_NEW}>{bountyExpLabel(BOUNTY_EXP_NEW)}</option>
                 </select>
               </label>
+              )}
 
               <label className="block">
                 <span className="mb-1.5 block text-sm font-medium text-gray-700">

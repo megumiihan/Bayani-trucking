@@ -2,9 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import type { ShipmentLog } from "@prisma/client";
-import { requireAdmin, requireUser } from "@/lib/auth";
+import { requireAdmin, requireStaff, requireUser } from "@/lib/auth";
 import {
-  calculateDestinationPayout,
   calculateLivestockPayout,
   calculatePlatformPayout,
   calculateWeightPayout,
@@ -18,8 +17,8 @@ import { mapShipmentLogToShipment } from "@/lib/mappers/shipmentLog";
 import { trimOrNull } from "@/lib/mappers/shipmentRemarks";
 import { prisma } from "@/lib/prisma";
 import {
-  getDefaultRouteRate,
-  type DestinationClient,
+  pickDefaultRouteRate,
+  resolveShipmentRate,
 } from "@/lib/rates";
 import type { Shipment } from "@/lib/mockData";
 
@@ -190,7 +189,7 @@ async function resolvePayout(input: {
     if (weightKg == null) {
       return {
         ok: false,
-        error: "Select a weight tier (2000, 3000, or 4000 kg).",
+        error: "Select a weight tier for this route.",
       };
     }
 
@@ -304,30 +303,40 @@ async function resolvePayout(input: {
     };
   }
 
-  if (isDestinationClient(input.client.name)) {
-    const selectedRoute = getDefaultRouteRate(
-      input.client.name as DestinationClient,
-      input.farthestRoute
-    );
-    const payout = calculateDestinationPayout({
-      client: input.client.name as DestinationClient,
-      routeName: input.farthestRoute,
-      distance: selectedRoute?.distance ?? "",
-      hasExtraHelper: input.hasExtraHelper,
-      hasHelper,
+  if (input.client.calcType === "DESTINATION") {
+    const matches = await prisma.destinationRoute.findMany({
+      where: {
+        clientId: input.client.id,
+        routeName: input.farthestRoute,
+        weightKg: null,
+      },
     });
+    const dbRoute = pickDefaultRouteRate(matches);
 
-    if (!payout) {
+    // Older shipments may use legacy short route names only in the static sheet.
+    const route =
+      dbRoute ??
+      (isDestinationClient(input.client.name)
+        ? resolveShipmentRate(input.client.name, input.farthestRoute, null)
+        : undefined);
+
+    if (!route) {
       return {
         ok: false,
         error: `No payout rate found for route "${input.farthestRoute}".`,
       };
     }
 
+    const payout = {
+      driverPayout: route.driverBaseRate,
+      helperPayout: hasHelper ? route.helperBaseRate : 0,
+      extraHelperPayout: input.hasExtraHelper ? route.extraHelperBaseRate : 0,
+    };
+
     return {
       ok: true,
       payout,
-      distance: selectedRoute?.distance || null,
+      distance: route.distance || null,
       pigheadCount: null,
       platformRate: null,
       weightKg: null,
@@ -526,7 +535,7 @@ export async function toggleShipmentFlag(
   id: string
 ): Promise<ToggleShipmentFlagResult> {
   try {
-    await requireAdmin();
+    await requireStaff();
 
     const current = await prisma.shipmentLog.findUnique({
       where: { id },
@@ -579,7 +588,10 @@ export interface UpdateShipmentInput {
   extraHelperNote?: string | null;
   remarks?: string | null;
   flagged: boolean;
+  /** Admin approval. Ignored when a secretary saves. */
   approved: boolean;
+  /** Secretary pre-approval. Only written when a secretary saves. */
+  secretaryApproved?: boolean;
   pigheadCount?: number | null;
   platformRate?: number | null;
   weightKg?: number | null;
@@ -598,7 +610,8 @@ export async function updateShipment(
   input: UpdateShipmentInput
 ): Promise<UpdateShipmentResult> {
   try {
-    await requireAdmin();
+    const user = await requireStaff();
+    const isAdmin = user.role === "admin";
 
     const existing = await prisma.shipmentLog.findUnique({
       where: { id },
@@ -662,6 +675,24 @@ export async function updateShipment(
         : Promise.resolve(null),
     ]);
 
+    // A secretary can't change approval. If their edit changes who gets paid or
+    // how much on an approved shipment, it goes back to the admin for approval.
+    const payoutChanged =
+      existing.driverPayout !== driverPayout ||
+      existing.helperPayout !== helperPayout ||
+      existing.extraHelperPayout !== extraHelperPayout ||
+      existing.driverName !== input.driver ||
+      (existing.helperName ?? null) !== (hasAssignedHelper(input.helper) ? input.helper!.trim() : null) ||
+      (existing.extraHelperName ?? null) !== (hasExtraHelper ? input.extraHelper || null : null);
+    const approval = isAdmin
+      ? { isApproved: input.approved }
+      : existing.isApproved && payoutChanged
+        ? { isApproved: false, isSecretaryApproved: true }
+        : {
+            isApproved: existing.isApproved,
+            isSecretaryApproved: input.secretaryApproved ?? existing.isSecretaryApproved,
+          };
+
     const updated = await prisma.shipmentLog.update({
       where: { id },
       data: {
@@ -688,7 +719,7 @@ export async function updateShipment(
           : null,
         remarks: updateRemarks(input),
         isFlagged: input.flagged,
-        isApproved: input.approved,
+        ...approval,
         driverPayout,
         helperPayout,
         extraHelperPayout,
@@ -751,6 +782,39 @@ export async function deleteShipment(
         error instanceof Error
           ? error.message
           : "An unexpected error occurred while deleting the shipment.",
+    };
+  }
+}
+
+/**
+ * Secretary pre-approval. Shown in yellow; it does not count toward payouts.
+ * Only an admin's approval (setShipmentApproval) does.
+ */
+export async function setShipmentSecretaryApproval(
+  ids: string[],
+  approved: boolean
+): Promise<ApproveShipmentsResult> {
+  try {
+    await requireStaff();
+    if (ids.length === 0) return { success: true, count: 0 };
+
+    const result = await prisma.shipmentLog.updateMany({
+      where: { id: { in: ids } },
+      data: { isSecretaryApproved: approved },
+    });
+
+    revalidatePath("/");
+    revalidatePath("/admin/employees");
+
+    return { success: true, count: result.count };
+  } catch (error) {
+    console.error("[setShipmentSecretaryApproval]", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred while pre-approving.",
     };
   }
 }

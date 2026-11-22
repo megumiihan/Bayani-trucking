@@ -1,6 +1,8 @@
 import { PrismaClient, type EmployeeRole } from "@prisma/client";
 import { calculateDestinationPayout } from "../lib/calculations";
 import { clients, toPrismaCalculationType } from "../lib/clients";
+import { CLIENT_DIRECTORY } from "../lib/clientDirectory";
+import { SUPPLIER_DIRECTORY } from "../lib/suppliers";
 import { employees, shipments } from "../lib/mockData";
 import { livestockDestinationRates } from "../lib/livestock";
 import { bountyWeightRates } from "../lib/weight";
@@ -10,7 +12,8 @@ import { trimOrNull } from "../lib/mappers/shipmentRemarks";
 
 const prisma = new PrismaClient();
 
-function toPrismaEmployeeRole(role: "Driver" | "Helper"): EmployeeRole {
+function toPrismaEmployeeRole(role: "Driver" | "Helper" | "Secretary"): EmployeeRole {
+  if (role === "Secretary") return "SECRETARY";
   return role === "Driver" ? "DRIVER" : "HELPER";
 }
 
@@ -75,7 +78,21 @@ async function main() {
     });
     clientIdByName.set(record.name, record.id);
   }
-  console.log(`  ${clients.length} clients`);
+  // Registered names, addresses and TINs; adds directory-only clients (e.g. Chooks To Go).
+  for (const { name, ...details } of CLIENT_DIRECTORY) {
+    const record = await prisma.client.upsert({
+      where: { name },
+      update: details,
+      create: { name, ...details },
+    });
+    clientIdByName.set(record.name, record.id);
+  }
+  console.log(`  ${clientIdByName.size} clients`);
+
+  console.log("Seeding suppliers…");
+  await prisma.supplier.deleteMany();
+  await prisma.supplier.createMany({ data: SUPPLIER_DIRECTORY });
+  console.log(`  ${SUPPLIER_DIRECTORY.length} suppliers`);
 
   console.log("Seeding employees…");
   for (const employee of employees) {

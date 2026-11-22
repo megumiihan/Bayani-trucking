@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { checkItemsFor, todayISO, type CheckItems, type CheckResult } from "@/lib/truckMaintenance";
+import {
+  checkItemsFor,
+  todayISO,
+  type CheckItem,
+  type CheckItems,
+  type CheckResult,
+} from "@/lib/truckMaintenance";
 import type { CheckWriteInput } from "@/lib/truckRecords";
 import { inputClass } from "@/components/ui/formStyles";
 import { useEscapeToClose } from "@/components/ui/useEscapeToClose";
@@ -12,6 +18,8 @@ interface TruckCheckModalProps {
   error: string | null;
   plateNumber: string;
   truckType: string;
+  /** All check items, archived included. */
+  checkItems: CheckItem[];
   onClose: () => void;
   onSave: (input: CheckWriteInput) => Promise<void>;
 }
@@ -22,10 +30,11 @@ export default function TruckCheckModal({
   error,
   plateNumber,
   truckType,
+  checkItems,
   onClose,
   onSave,
 }: TruckCheckModalProps) {
-  const items = checkItemsFor(truckType);
+  const items = checkItemsFor(checkItems, truckType);
   const [checkedAt, setCheckedAt] = useState(todayISO);
   const [results, setResults] = useState<CheckItems>({});
   const [notes, setNotes] = useState("");

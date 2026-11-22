@@ -77,7 +77,7 @@ export default function DestinationRateHistoryModal({
             Rate History — {clientName}
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Previous and new rates for each edit, newest first.
+            Routes added and rate edits, newest first.
           </p>
         </div>
 
@@ -108,38 +108,7 @@ export default function DestinationRateHistoryModal({
                   key={entry.id}
                   className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="font-medium text-slate-900">
-                        {entry.routeName}
-                        {entry.distance ? (
-                          <span className="ml-1 text-slate-500">· {entry.distance}</span>
-                        ) : null}
-                      </p>
-                      <p className="mt-0.5 text-xs text-slate-500">
-                        {historyDateFormatter.format(new Date(entry.changedAt))}
-                        {" · "}
-                        {entry.changedByEmail}
-                      </p>
-                    </div>
-                  </div>
-                  <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
-                    <RateChange
-                      label="Driver"
-                      from={entry.prevDriverBaseRate}
-                      to={entry.newDriverBaseRate}
-                    />
-                    <RateChange
-                      label="Helper"
-                      from={entry.prevHelperBaseRate}
-                      to={entry.newHelperBaseRate}
-                    />
-                    <RateChange
-                      label="Extra helper"
-                      from={entry.prevExtraHelperBaseRate}
-                      to={entry.newExtraHelperBaseRate}
-                    />
-                  </dl>
+                  <RouteHistoryEntry entry={entry} />
                 </li>
               ))}
             </ul>
@@ -160,24 +129,97 @@ export default function DestinationRateHistoryModal({
   );
 }
 
+export function RouteHistoryEntry({
+  entry,
+}: {
+  entry: DestinationRateHistoryEntry;
+}) {
+  const isWeight = entry.weightKg != null;
+  const changes: Array<{ label: string; from: number | null; to: number | null }> =
+    isWeight
+      ? [
+          { label: "Helper", from: entry.prevHelperBaseRate, to: entry.newHelperBaseRate },
+          { label: "Driver", from: entry.prevDriverBaseRate, to: entry.newDriverBaseRate },
+          { label: "Same driver", from: entry.prevSameDriverRate, to: entry.newSameDriverRate },
+          { label: "Inexp. helper", from: entry.prevNewHelperRate, to: entry.newNewHelperRate },
+          { label: "Inexp. driver", from: entry.prevNewDriverRate, to: entry.newNewDriverRate },
+        ]
+      : [
+          { label: "Driver", from: entry.prevDriverBaseRate, to: entry.newDriverBaseRate },
+          { label: "Helper", from: entry.prevHelperBaseRate, to: entry.newHelperBaseRate },
+          {
+            label: "Extra helper",
+            from: entry.prevExtraHelperBaseRate,
+            to: entry.newExtraHelperBaseRate,
+          },
+        ];
+
+  return (
+    <>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="font-medium text-slate-900">
+            {entry.routeName}
+            {entry.distance ? (
+              <span className="ml-1 text-slate-500">· {entry.distance}</span>
+            ) : null}
+            {isWeight ? (
+              <span className="ml-1 text-slate-500">· {entry.weightKg} kg</span>
+            ) : null}
+          </p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {historyDateFormatter.format(new Date(entry.changedAt))}
+            {" · "}
+            {entry.changedByEmail}
+          </p>
+        </div>
+        {entry.isCreated && (
+          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+            Added
+          </span>
+        )}
+      </div>
+      <dl
+        className={`mt-3 grid grid-cols-2 gap-2 text-sm ${
+          isWeight ? "sm:grid-cols-5" : "sm:grid-cols-3"
+        }`}
+      >
+        {changes.map((change) => (
+          <RateChange
+            key={change.label}
+            label={change.label}
+            from={entry.isCreated ? null : change.from}
+            to={change.to}
+          />
+        ))}
+      </dl>
+    </>
+  );
+}
+
 function RateChange({
   label,
   from,
   to,
 }: {
   label: string;
-  from: number;
-  to: number;
+  from: number | null;
+  to: number | null;
 }) {
-  const changed = from !== to;
+  if (to == null) return null;
+  const changed = from != null && from !== to;
   return (
     <div>
       <dt className="text-xs font-medium uppercase tracking-wider text-slate-500">
         {label}
       </dt>
       <dd className="mt-0.5 font-mono tabular-nums text-slate-800">
-        {formatCurrency(from)}
-        <span className="mx-1 text-slate-400">→</span>
+        {from != null && (
+          <>
+            {formatCurrency(from)}
+            <span className="mx-1 text-slate-400">→</span>
+          </>
+        )}
         <span className={changed ? "font-semibold text-blue-700" : ""}>
           {formatCurrency(to)}
         </span>

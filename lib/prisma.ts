@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 
-const CLIENT_REV = 28;
+const CLIENT_REV = 31;
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -50,7 +50,9 @@ const reusable =
   "salaryPayment" in cached &&
   "expense" in cached &&
   "billable" in cached &&
-  "truckRepair" in cached
+  "truckRepair" in cached &&
+  "lead" in cached &&
+  "supplier" in cached
     ? cached
     : undefined;
 

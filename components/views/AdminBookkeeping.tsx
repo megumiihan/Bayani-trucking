@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useRole } from "@/context/RoleContext";
@@ -27,6 +28,7 @@ import {
   BOOKKEEPING_LEDGER_LABELS,
   BOOKKEEPING_LEDGERS,
   type BillableUi,
+  billableAmountDue,
   type BillableWriteInput,
   type BookkeepingLedger,
   type CollectionReceiptUi,
@@ -35,6 +37,7 @@ import {
   type DisbursementWriteInput,
 } from "@/lib/bookkeeping";
 import type { Client } from "@/lib/clients";
+import type { Supplier } from "@/lib/suppliers";
 import { exportBillablesToCsv } from "@/lib/exportBillables";
 import { exportCollectionReceiptsToCsv } from "@/lib/exportCollectionReceipts";
 import { exportExpensesToCsv } from "@/lib/exportExpenses";
@@ -66,6 +69,7 @@ interface AdminBookkeepingProps {
   employees: Employee[];
   trucks: Truck[];
   clients: Client[];
+  suppliers: Supplier[];
 }
 
 const LOG_BUTTONS: { ledger: BookkeepingLedger; label: string }[] = [
@@ -83,8 +87,19 @@ export default function AdminBookkeeping({
   initialCollectionReceipts,
   employees,
   trucks,
-  clients,
+  clients: initialClients,
+  suppliers,
 }: AdminBookkeepingProps) {
+  // Grows when "Others" adds a one-off client, so it can be picked again.
+  const [clients, setClients] = useState(initialClients);
+  const addCreatedClient = (created: Client | null) => {
+    if (!created) return;
+    setClients((list) =>
+      list.some((c) => c.id === created.id)
+        ? list
+        : [...list, created].sort((a, b) => a.name.localeCompare(b.name))
+    );
+  };
   const { role } = useRole();
   const router = useRouter();
   const pathname = usePathname();
@@ -178,6 +193,16 @@ export default function AdminBookkeeping({
     [billables]
   );
 
+  const collectedBillableIds = useMemo(
+    () =>
+      new Set(
+        collectionReceipts.flatMap((receipt) =>
+          receipt.items.flatMap((item) => (item.billableId ? [item.billableId] : []))
+        )
+      ),
+    [collectionReceipts]
+  );
+
   const totalCollections = useMemo(
     () =>
       collectionReceipts.reduce((sum, row) => sum + row.collectionAmount, 0),
@@ -246,6 +271,7 @@ export default function AdminBookkeeping({
       return;
     }
 
+    addCreatedClient(result.createdClient);
     setBillables((current) => {
       if (editingBillable) {
         return current.map((row) =>
@@ -341,6 +367,7 @@ export default function AdminBookkeeping({
       return;
     }
 
+    addCreatedClient(result.createdClient);
     setCollectionReceipts((current) => [result.receipt, ...current]);
     setOpenForm(null);
   };
@@ -350,16 +377,26 @@ export default function AdminBookkeeping({
       <PageHeader
         title="Bookkeeping"
         description="Log billables, expenses, disbursements, and collection receipts from one place."
-        actions={LOG_BUTTONS.map((button) => (
-          <button
-            key={button.ledger}
-            type="button"
-            onClick={() => openLogForm(button.ledger)}
-            className="rounded-lg bg-blue-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
-          >
-            {button.label}
-          </button>
-        ))}
+        actions={
+          <>
+            {LOG_BUTTONS.map((button) => (
+              <button
+                key={button.ledger}
+                type="button"
+                onClick={() => openLogForm(button.ledger)}
+                className="rounded-lg bg-blue-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+              >
+                {button.label}
+              </button>
+            ))}
+            <Link
+              href="/admin/bookkeeping/directory"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+            >
+              Clients &amp; suppliers
+            </Link>
+          </>
+        }
       />
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -566,6 +603,7 @@ export default function AdminBookkeeping({
         error={saveError}
         employees={employees}
         trucks={trucks}
+        suppliers={suppliers}
         expense={editingExpense}
         onClose={closeForm}
         onSave={handleSaveExpense}
@@ -583,6 +621,7 @@ export default function AdminBookkeeping({
       />
       <LogDisbursementModal
         isOpen={openForm === "disbursement"}
+        suppliers={suppliers}
         isSaving={isSaving}
         error={saveError}
         onClose={closeForm}
@@ -593,6 +632,8 @@ export default function AdminBookkeeping({
         isSaving={isSaving}
         error={saveError}
         clients={clients}
+        billables={billables}
+        collectedBillableIds={collectedBillableIds}
         onClose={closeForm}
         onSave={handleSaveCollectionReceipt}
       />
@@ -669,6 +710,7 @@ function LedgerTable({
           "Output tax",
           "Withholding tax",
           "Total tax",
+          "Total amount due",
           "Logged by",
           "Actions",
         ]}
@@ -712,8 +754,11 @@ function LedgerTable({
             <td className="whitespace-nowrap px-4 py-3 text-slate-700">
               {formatCurrency(row.withholdingTax)}
             </td>
-            <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+            <td className="whitespace-nowrap px-4 py-3 text-slate-700">
               {formatCurrency(row.totalTax)}
+            </td>
+            <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+              {formatCurrency(billableAmountDue(row.totalInvoiceAmt, row.withholdingTax))}
             </td>
             <td className="whitespace-nowrap px-4 py-3 text-slate-700">
               {row.createdByName}
@@ -808,6 +853,8 @@ function LedgerTable({
           "Date",
           "Payee",
           "Amount",
+          "Invoice no.",
+          "VAT Reg. No.",
           "Reference no.",
           "Description",
           "Logged by",
@@ -829,6 +876,12 @@ function LedgerTable({
               {formatCurrency(row.amount)}
             </td>
             <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+              {row.invoiceNo || "—"}
+            </td>
+            <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+              {row.vatRegNo || "—"}
+            </td>
+            <td className="whitespace-nowrap px-4 py-3 text-slate-700">
               {row.referenceNo || "—"}
             </td>
             <td className="max-w-xs px-4 py-3 text-slate-500">
@@ -848,6 +901,11 @@ function LedgerTable({
       columns={[
         "Client",
         "OR number",
+        "SI / invoice no.",
+        "Buyer name",
+        "Buyer address",
+        "VAT Reg. No.",
+        "Total amount due",
         "Collection amount",
         "Payment details",
         "Date paid",
@@ -860,34 +918,62 @@ function LedgerTable({
       onLog={onLog}
       isEmpty={collectionReceipts.length === 0}
     >
-      {collectionReceipts.map((row) => (
-        <tr key={row.id} className="hover:bg-slate-50">
-          <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
-            {row.clientName || "—"}
-          </td>
-          <td className="whitespace-nowrap px-4 py-3 text-slate-700">
-            {row.orNumber}
-          </td>
-          <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
-            {formatCurrency(row.collectionAmount)}
-          </td>
-          <td className="whitespace-nowrap px-4 py-3 text-slate-700">
-            {row.paymentDetails || "—"}
-          </td>
-          <td className="whitespace-nowrap px-4 py-3 text-slate-700">
-            {row.datePaid}
-          </td>
-          <td className="whitespace-nowrap px-4 py-3 text-slate-700">
-            {row.whoPaid}
-          </td>
-          <td className="whitespace-nowrap px-4 py-3 text-slate-700">
-            {row.whoReceived}
-          </td>
-          <td className="whitespace-nowrap px-4 py-3 text-slate-700">
-            {row.createdByName}
-          </td>
-        </tr>
-      ))}
+      {collectionReceipts.flatMap((row) => {
+        // One table row per SI; receipt-level cells span all of them.
+        const items = row.items.length > 0 ? row.items : [null];
+        const span = items.length;
+        const receiptCell = "px-4 py-3 align-top";
+        return items.map((item, index) => (
+          <tr
+            key={`${row.id}-${item?.id ?? "none"}`}
+            className={index === span - 1 ? "hover:bg-slate-50" : "border-b-0 hover:bg-slate-50"}
+          >
+            {index === 0 && (
+              <>
+                <td rowSpan={span} className={`${receiptCell} whitespace-nowrap font-medium text-slate-900`}>
+                  {row.clientName || "—"}
+                </td>
+                <td rowSpan={span} className={`${receiptCell} whitespace-nowrap text-slate-700`}>
+                  {row.orNumber}
+                </td>
+              </>
+            )}
+            <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+              {item?.invoiceNo ?? <span className="text-slate-400">—</span>}
+            </td>
+            <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+              {item?.buyerName || "—"}
+            </td>
+            <td className="max-w-xs px-4 py-3 text-slate-500">{item?.buyerAddress || "—"}</td>
+            <td className="whitespace-nowrap px-4 py-3 text-slate-700">{item?.vatRegNo || "—"}</td>
+            <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+              {item ? formatCurrency(item.amountDue) : "—"}
+            </td>
+            {index === 0 && (
+              <>
+                <td rowSpan={span} className={`${receiptCell} whitespace-nowrap font-medium text-slate-900`}>
+                  {formatCurrency(row.collectionAmount)}
+                </td>
+                <td rowSpan={span} className={`${receiptCell} whitespace-nowrap text-slate-700`}>
+                  {row.paymentDetails || "—"}
+                </td>
+                <td rowSpan={span} className={`${receiptCell} whitespace-nowrap text-slate-700`}>
+                  {row.datePaid}
+                </td>
+                <td rowSpan={span} className={`${receiptCell} whitespace-nowrap text-slate-700`}>
+                  {row.whoPaid}
+                </td>
+                <td rowSpan={span} className={`${receiptCell} whitespace-nowrap text-slate-700`}>
+                  {row.whoReceived}
+                </td>
+                <td rowSpan={span} className={`${receiptCell} whitespace-nowrap text-slate-700`}>
+                  {row.createdByName}
+                </td>
+              </>
+            )}
+          </tr>
+        ));
+      })}
     </DataTable>
   );
 }

@@ -139,7 +139,11 @@ export interface PayoutLedgerRow {
   paid: number;
   balanceAfter: number;
   approved?: boolean;
+  /** Secretary pre-approval (display only). */
+  secretaryApproved?: boolean;
   shipmentId?: string;
+  /** Who logged the shipment or payment. */
+  loggedBy: string | null;
 }
 
 export function buildPayoutLedger(
@@ -163,7 +167,9 @@ export function buildPayoutLedger(
       earned: entry.payout,
       paid: 0,
       approved: entry.shipment.approved,
+      secretaryApproved: entry.shipment.secretaryApproved === true,
       shipmentId: entry.shipment.id,
+      loggedBy: entry.shipment.uploadedByName ?? null,
     }));
 
   const paidRows: Omit<PayoutLedgerRow, "balanceAfter">[] = payments.map(
@@ -181,6 +187,7 @@ export function buildPayoutLedger(
       note: payment.note,
       earned: 0,
       paid: payment.amount,
+      loggedBy: payment.createdByName,
     })
   );
 

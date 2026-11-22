@@ -37,6 +37,7 @@ const VIEW_STORAGE_KEY = "employees-overview-view";
 const roleStyles: Record<Employee["role"], { header: string; badge: string }> = {
   Driver: { header: "bg-blue-700", badge: "bg-blue-100 text-blue-800" },
   Helper: { header: "bg-sky-500", badge: "bg-sky-100 text-sky-800" },
+  Secretary: { header: "bg-violet-600", badge: "bg-violet-100 text-violet-800" },
 };
 const inactiveHeader = "bg-gray-300";
 
@@ -48,7 +49,9 @@ export default function AdminEmployeesOverview({
   initialEmployees,
   initialShipments,
 }: AdminEmployeesOverviewProps) {
-  const { role } = useRole();
+  const { role, isStaffView } = useRole();
+  // Secretaries see the roster but not payout totals or account tools.
+  const showMoney = role === "admin";
   const router = useRouter();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isLoginsOpen, setIsLoginsOpen] = useState(false);
@@ -135,7 +138,7 @@ export default function AdminEmployeesOverview({
     );
   }, [rows, query, sort]);
 
-  if (role !== "admin") {
+  if (!isStaffView) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-amber-800">
         Admin access required. Switch to Admin view using the role toggle.
@@ -166,6 +169,8 @@ export default function AdminEmployeesOverview({
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 sm:w-56"
             />
             <ViewToggle view={view} onChange={changeView} />
+            {showMoney && (
+            <>
             <button
               type="button"
               onClick={() => setIsLoginsOpen(true)}
@@ -180,6 +185,8 @@ export default function AdminEmployeesOverview({
             >
               Add employee
             </button>
+            </>
+            )}
           </>
         }
       />
@@ -207,11 +214,11 @@ export default function AdminEmployeesOverview({
       ) : view === "grid" ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
           {visibleRows.map((row) => (
-            <EmployeeCard key={row.employee.id} {...row} />
+            <EmployeeCard key={row.employee.id} {...row} showMoney={showMoney} />
           ))}
         </div>
       ) : (
-        <EmployeeTable rows={visibleRows} sort={sort} onSort={toggleSort} />
+        <EmployeeTable rows={visibleRows} sort={sort} onSort={toggleSort} showMoney={showMoney} />
       )}
     </div>
   );
@@ -268,7 +275,12 @@ function ViewToggle({
   );
 }
 
-function EmployeeCard({ employee, shipmentCount, totalPayout }: EmployeeRow) {
+function EmployeeCard({
+  employee,
+  shipmentCount,
+  totalPayout,
+  showMoney,
+}: EmployeeRow & { showMoney: boolean }) {
   const active = isActive(employee);
   const styles = roleStyles[employee.role];
 
@@ -304,8 +316,13 @@ function EmployeeCard({ employee, shipmentCount, totalPayout }: EmployeeRow) {
           {!active && <Badge label="Inactive" className="bg-gray-100 text-gray-600" />}
         </div>
         <p className="mt-2 text-[11px] text-gray-500 tabular-nums">
-          {shipmentCount} {shipmentCount === 1 ? "shipment" : "shipments"} ·{" "}
-          <span className="font-medium text-green-700">{formatCurrency(totalPayout)}</span>
+          {shipmentCount} {shipmentCount === 1 ? "shipment" : "shipments"}
+          {showMoney && (
+            <>
+              {" · "}
+              <span className="font-medium text-green-700">{formatCurrency(totalPayout)}</span>
+            </>
+          )}
         </p>
       </div>
     </Link>
@@ -316,10 +333,12 @@ function EmployeeTable({
   rows,
   sort,
   onSort,
+  showMoney,
 }: {
   rows: EmployeeRow[];
   sort: { key: SortKey; dir: SortDir };
   onSort: (key: SortKey) => void;
+  showMoney: boolean;
 }) {
   const header = (key: SortKey, label: string, align: "left" | "right" = "left") => (
     <th
@@ -357,7 +376,7 @@ function EmployeeTable({
             {header("role", "Role")}
             {header("employment", "Employment")}
             {header("shipments", "Shipments", "right")}
-            {header("payout", "Total payout", "right")}
+            {showMoney && header("payout", "Total payout", "right")}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -409,9 +428,11 @@ function EmployeeTable({
                 <td className="px-4 py-2.5 text-right text-sm tabular-nums text-gray-900">
                   {shipmentCount}
                 </td>
-                <td className="px-4 py-2.5 text-right text-sm font-semibold tabular-nums text-green-700">
-                  {formatCurrency(totalPayout)}
-                </td>
+                {showMoney && (
+                  <td className="px-4 py-2.5 text-right text-sm font-semibold tabular-nums text-green-700">
+                    {formatCurrency(totalPayout)}
+                  </td>
+                )}
               </tr>
             );
           })}

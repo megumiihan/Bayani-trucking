@@ -20,6 +20,7 @@ import { recordSalaryPayment } from "@/lib/actions/payment";
 import {
   approveShipments,
   setShipmentApproval,
+  setShipmentSecretaryApproval,
 } from "@/lib/actions/shipment";
 import type { SalaryPaymentUi } from "@/lib/mappers/salaryPayment";
 import {
@@ -31,6 +32,7 @@ import {
 import RecordPayoutModal from "@/components/admin/RecordPayoutModal";
 import EmployeeLoginCard from "@/components/admin/EmployeeLoginCard";
 import EmployeePhotoUpload from "@/components/admin/EmployeePhotoUpload";
+import EmployeeAvatar from "@/components/ui/EmployeeAvatar";
 import GovernmentIdsPanel from "@/components/admin/GovernmentIdsPanel";
 import type { GovernmentIds } from "@/lib/governmentIds";
 import Badge from "@/components/ui/Badge";
@@ -61,7 +63,9 @@ export default function AdminEmployeeDetail({
   loginEmail,
   governmentIds,
 }: AdminEmployeeDetailProps) {
-  const { role } = useRole();
+  const { role, isStaffView } = useRole();
+  // Secretaries log and edit payouts but don't see money totals or account settings.
+  const isAdminView = role === "admin";
   const [shipments, setShipments] = useState(initialShipments);
   const [payments, setPayments] = useState(initialPayments);
   const [remarks, setRemarks] = useState(employee.remarks);
@@ -164,13 +168,30 @@ export default function AdminEmployeeDetail({
     setShipments(initialShipments);
   }, [initialShipments]);
 
-  if (role !== "admin") {
+  if (!isStaffView) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-amber-800">
         Admin access required. Switch to Admin view using the role toggle.
       </div>
     );
   }
+
+  const handleTogglePreApproval = async (shipmentId: string, current: boolean) => {
+    if (approvingId) return;
+    setApprovingId(shipmentId);
+    setApprovalError(null);
+    const setFlag = (value: boolean) =>
+      setShipments((list) =>
+        list.map((s) => (s.id === shipmentId ? { ...s, secretaryApproved: value } : s))
+      );
+    setFlag(!current);
+    const result = await setShipmentSecretaryApproval([shipmentId], !current);
+    setApprovingId(null);
+    if (!result.success) {
+      setFlag(current);
+      setApprovalError(result.error);
+    }
+  };
 
   const handleToggleApproval = async (
     shipmentId: string,
@@ -313,19 +334,28 @@ export default function AdminEmployeeDetail({
         {/* Profile card */}
         <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col items-center text-center">
-            <EmployeePhotoUpload
-              key={employee.photoUrl ?? "none"}
-              employeeId={employee.id}
-              name={employee.name}
-              photoUrl={employee.photoUrl}
-            />
+            {isAdminView ? (
+              <EmployeePhotoUpload
+                key={employee.photoUrl ?? "none"}
+                employeeId={employee.id}
+                name={employee.name}
+                photoUrl={employee.photoUrl}
+              />
+            ) : (
+              <EmployeeAvatar
+                name={employee.name}
+                photoUrl={employee.photoUrl}
+                size={96}
+                className="ring-4 ring-white shadow-md"
+              />
+            )}
             <h1 className="mt-3 text-balance text-2xl font-bold tracking-tight text-slate-900">
               {employee.name}
             </h1>
             <p className="text-sm text-slate-500">{employee.position}</p>
           </div>
 
-          {!isEditingDetails && (
+          {isAdminView && !isEditingDetails && (
             <button
               type="button"
               onClick={startEditingDetails}
@@ -366,6 +396,7 @@ export default function AdminEmployeeDetail({
                   >
                     <option value="Driver">Driver</option>
                     <option value="Helper">Helper</option>
+                    <option value="Secretary">Secretary</option>
                   </select>
                 </label>
                 <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
@@ -453,11 +484,13 @@ export default function AdminEmployeeDetail({
                   label="Employment"
                   value={employee.isRegular ? "Regular" : "Non-regular"}
                 />
-                <InfoRow
-                  icon={<StarIcon />}
-                  label="Bounty"
-                  value={bountyExpLabel(employee.bountyExp)}
-                />
+                {employee.role !== "Secretary" && (
+                  <InfoRow
+                    icon={<StarIcon />}
+                    label="Bounty"
+                    value={bountyExpLabel(employee.bountyExp)}
+                  />
+                )}
               </dl>
             )}
           </div>
@@ -467,7 +500,9 @@ export default function AdminEmployeeDetail({
         <section className="flex flex-col rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-6 py-4">
             <div>
-              <h2 className="text-base font-semibold text-gray-900">Earnings</h2>
+              <h2 className="text-base font-semibold text-gray-900">
+                {isAdminView ? "Earnings" : "Activity"}
+              </h2>
               <p className="text-sm text-gray-500">
                 {showLifetime ? "All recorded trips and payouts" : monthLabel}
               </p>
@@ -496,20 +531,33 @@ export default function AdminEmployeeDetail({
           <div className="px-6 py-4">
             <SummaryBlock
               {...(showLifetime ? summaries.lifetime : summaries.month)}
+              showMoney={isAdminView}
             />
           </div>
 
-          <div className="border-t border-gray-100 px-6 py-4">
-            <EmployeeLoginCard
-              key={employee.id}
-              employeeId={employee.id}
-              employeeName={employee.name}
-              isActive={employee.isActive !== false}
-              initialLoginEmail={loginEmail}
-              embedded
-            />
-          </div>
+          {isAdminView && (
+            <div className="border-t border-gray-100 px-6 py-4">
+              <EmployeeLoginCard
+                key={employee.id}
+                employeeId={employee.id}
+                employeeName={employee.name}
+                isActive={employee.isActive !== false}
+                initialLoginEmail={loginEmail}
+                embedded
+              />
+            </div>
+          )}
 
+          {!isAdminView ? (
+            <div className="flex-1 border-t border-gray-100 px-6 py-4">
+              <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-gray-500">
+                Admin Remarks
+              </span>
+              <p className="whitespace-pre-wrap text-sm text-gray-700">
+                {employee.remarks || <span className="text-gray-400">No remarks.</span>}
+              </p>
+            </div>
+          ) : (
           <div className="flex flex-1 flex-col border-t border-gray-100 px-6 py-4">
             <label className="flex flex-1 flex-col">
               <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-gray-500">
@@ -539,6 +587,7 @@ export default function AdminEmployeeDetail({
               </button>
             )}
           </div>
+          )}
         </section>
       </div>
 
@@ -559,7 +608,7 @@ export default function AdminEmployeeDetail({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {summaries.lifetime.pendingShipments > 0 && (
+            {isAdminView && summaries.lifetime.pendingShipments > 0 && (
               <button
                 type="button"
                 disabled={isApprovingAll}
@@ -624,7 +673,8 @@ export default function AdminEmployeeDetail({
                   "Role",
                   "Earned",
                   "Paid",
-                  "Balance",
+                  ...(isAdminView ? ["Balance"] : []),
+                  "Logged by",
                   "Note",
                   "Action",
                 ].map((col) => (
@@ -640,7 +690,7 @@ export default function AdminEmployeeDetail({
             <tbody className="divide-y divide-gray-50">
               {ledger.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-gray-500">
+                  <td colSpan={isAdminView ? 10 : 9} className="px-4 py-10 text-center text-gray-500">
                     No shipments or payouts recorded for this employee yet.
                   </td>
                 </tr>
@@ -650,6 +700,8 @@ export default function AdminEmployeeDetail({
                     key={row.id}
                     row={row}
                     onToggleApproval={handleToggleApproval}
+                    onTogglePreApproval={handleTogglePreApproval}
+                    isAdminView={isAdminView}
                     isApproving={approvingId === row.shipmentId}
                   />
                 ))
@@ -661,7 +713,7 @@ export default function AdminEmployeeDetail({
 
       <RecordPayoutModal
         employeeName={employee.name}
-        balanceDue={balanceDue}
+        balanceDue={isAdminView ? balanceDue : null}
         isOpen={isPayoutOpen}
         isSaving={isSavingPayout}
         error={payoutError}
@@ -679,12 +731,17 @@ export default function AdminEmployeeDetail({
 function LedgerRow({
   row,
   onToggleApproval,
+  onTogglePreApproval,
+  isAdminView,
   isApproving,
 }: {
   row: ReturnType<typeof buildPayoutLedger>[number];
   onToggleApproval: (shipmentId: string, currentApproved: boolean) => void;
+  onTogglePreApproval: (shipmentId: string, current: boolean) => void;
+  isAdminView: boolean;
   isApproving: boolean;
 }) {
+  const isPreApproved = row.kind === "shipment" && !row.approved && row.secretaryApproved === true;
   const isPayment = row.kind === "payment";
   const isUnapprovedShipment =
     row.kind === "shipment" && row.approved === false;
@@ -705,6 +762,11 @@ function LedgerRow({
           <Badge
             label="Payout"
             className="bg-emerald-100 text-emerald-800"
+          />
+        ) : isPreApproved ? (
+          <Badge
+            label="Pre-approved"
+            className="border border-yellow-300 bg-yellow-100 text-yellow-800"
           />
         ) : isUnapprovedShipment ? (
           <Badge
@@ -782,14 +844,48 @@ function LedgerRow({
       <td className="whitespace-nowrap px-4 py-3 font-medium text-emerald-800">
         {row.paid > 0 ? formatCurrency(row.paid) : "—"}
       </td>
-      <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">
-        {formatCurrency(row.balanceAfter)}
+      {isAdminView && (
+        <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">
+          {formatCurrency(row.balanceAfter)}
+        </td>
+      )}
+      <td className="whitespace-nowrap px-4 py-3 text-gray-700">
+        {row.loggedBy ?? <span className="text-gray-400">—</span>}
       </td>
       <td className="max-w-xs truncate px-4 py-3 text-gray-500">
         {row.note || "—"}
       </td>
       <td className="whitespace-nowrap px-4 py-3">
-        {row.kind === "shipment" && row.shipmentId ? (
+        {row.kind === "shipment" && row.shipmentId && !isAdminView ? (
+          row.approved ? (
+            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-emerald-700">
+              <span className="font-semibold">✓</span> Approved
+            </span>
+          ) : (
+            <button
+              type="button"
+              disabled={isApproving}
+              onClick={() => onTogglePreApproval(row.shipmentId!, isPreApproved)}
+              title={
+                isPreApproved
+                  ? "Click to remove your pre-approval"
+                  : "Pre-approve. The admin still has to approve before it counts toward payouts."
+              }
+              className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400 disabled:opacity-50 ${
+                isPreApproved
+                  ? "bg-yellow-400 text-yellow-950 hover:bg-yellow-300"
+                  : "border border-yellow-400 text-yellow-800 hover:bg-yellow-50"
+              }`}
+            >
+              {isApproving ? (
+                <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-yellow-800 border-t-transparent" />
+              ) : (
+                <span aria-hidden>✓</span>
+              )}
+              <span>{isPreApproved ? "Pre-approved" : "Pre-approve"}</span>
+            </button>
+          )
+        ) : row.kind === "shipment" && row.shipmentId ? (
           row.approved ? (
             <button
               type="button"
@@ -843,13 +939,36 @@ function SummaryBlock({
   paid,
   pendingEarned,
   pendingShipments,
+  approvedShipments,
+  showMoney = true,
 }: {
   shipments: number;
   earned: number;
   paid: number;
   pendingEarned?: number;
   pendingShipments?: number;
+  approvedShipments?: number;
+  /** False for secretaries: counts only, no peso totals. */
+  showMoney?: boolean;
 }) {
+  if (!showMoney) {
+    return (
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        <SummaryStat label="Shipments" value={String(shipments)} accent="bg-blue-500" />
+        <SummaryStat
+          label="Approved"
+          value={String(approvedShipments ?? 0)}
+          accent="bg-green-500"
+        />
+        <SummaryStat
+          label="Awaiting approval"
+          value={String(pendingShipments ?? 0)}
+          accent="bg-yellow-400"
+        />
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">

@@ -90,9 +90,10 @@ export const bountyWeightRates = [
   },
 ] as const;
 
+/** Weight tiers are set per route on Routes & Rates; any positive whole kg is valid. */
 export function parseWeightKg(value: unknown): number | null {
   const kg = typeof value === "string" ? Number(value) : value;
-  if (kg !== 2000 && kg !== 3000 && kg !== 4000) return null;
+  if (typeof kg !== "number" || !Number.isInteger(kg) || kg <= 0) return null;
   return kg;
 }
 

@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import type { ClientRateHistoryKind } from "@prisma/client";
 import { fetchClientRateHistory } from "@/lib/actions/client";
+import { fetchDestinationRateHistory } from "@/lib/actions/route";
+import type { DestinationRateHistoryEntry } from "@/lib/mappers/routeHistory";
+import { RouteHistoryEntry } from "@/components/admin/DestinationRateHistoryModal";
 import type { ClientRateHistoryEntry } from "@/lib/mappers/clientRateHistory";
 import { formatCurrency } from "@/lib/mockData";
 import { fractionToPercentInput } from "@/lib/platform";
@@ -37,6 +40,7 @@ export default function ClientRateHistoryModal({
   onClose,
 }: ClientRateHistoryModalProps) {
   const [entries, setEntries] = useState<ClientRateHistoryEntry[]>([]);
+  const [routeEntries, setRouteEntries] = useState<DestinationRateHistoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,15 +51,26 @@ export default function ClientRateHistoryModal({
     setIsLoading(true);
     setError(null);
 
-    fetchClientRateHistory(clientId, kind).then((result) => {
+    // Livestock clients also have farthest routes with their own base rates.
+    Promise.all([
+      fetchClientRateHistory(clientId, kind),
+      kind === "LIVESTOCK"
+        ? fetchDestinationRateHistory(clientId)
+        : Promise.resolve(null),
+    ]).then(([result, routeResult]) => {
       if (cancelled) return;
       setIsLoading(false);
       if (!result.success) {
         setError(result.error);
         setEntries([]);
+        setRouteEntries([]);
         return;
       }
+      if (routeResult && !routeResult.success) {
+        setError(routeResult.error);
+      }
       setEntries(result.entries);
+      setRouteEntries(routeResult?.success ? routeResult.entries : []);
     });
 
     return () => {
@@ -107,7 +122,7 @@ export default function ClientRateHistoryModal({
             </p>
           )}
 
-          {!isLoading && !error && entries.length === 0 && (
+          {!isLoading && !error && entries.length === 0 && routeEntries.length === 0 && (
             <p className="py-8 text-center text-sm text-slate-500">
               No rate changes recorded yet for this client.
             </p>
@@ -165,6 +180,24 @@ export default function ClientRateHistoryModal({
                 </li>
               ))}
             </ul>
+          )}
+
+          {!isLoading && routeEntries.length > 0 && (
+            <>
+              <h3 className="mb-3 mt-6 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Routes
+              </h3>
+              <ul className="space-y-4">
+                {routeEntries.map((entry) => (
+                  <li
+                    key={entry.id}
+                    className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3"
+                  >
+                    <RouteHistoryEntry entry={entry} />
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </div>
 

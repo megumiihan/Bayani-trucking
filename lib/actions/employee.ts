@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
-import { mapEmployeeToUi } from "@/lib/mappers/employee";
+import { mapEmployeeToUi, toDbRole, toUiRole } from "@/lib/mappers/employee";
 import { trimOrNull } from "@/lib/mappers/shipmentRemarks";
 import { prisma } from "@/lib/prisma";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -18,7 +18,9 @@ import {
   resetLoginPassword,
   type LoginCredentials,
 } from "@/lib/employeeAccounts";
-import type { Employee } from "@/lib/mockData";
+import type { Employee, EmployeeRole } from "@/lib/mockData";
+
+const EMPLOYEE_ROLES: EmployeeRole[] = ["Driver", "Helper", "Secretary"];
 
 export type UpdateEmployeeRemarksResult =
   | { success: true; employee: Employee }
@@ -26,7 +28,7 @@ export type UpdateEmployeeRemarksResult =
 
 export interface EmployeeDetailsInput {
   name: string;
-  role: "Driver" | "Helper";
+  role: EmployeeRole;
   bountyExp: string;
   isActive: boolean;
   isRegular: boolean;
@@ -41,8 +43,8 @@ export async function updateEmployeeDetails(
 
     const fullName = input.name.trim().replace(/\s+/g, " ");
     if (!fullName) return { success: false, error: "Name is required." };
-    if (input.role !== "Driver" && input.role !== "Helper") {
-      return { success: false, error: "Role must be Driver or Helper." };
+    if (!EMPLOYEE_ROLES.includes(input.role)) {
+      return { success: false, error: "Role must be Driver, Helper or Secretary." };
     }
     if (input.bountyExp !== BOUNTY_EXP_OLD && input.bountyExp !== BOUNTY_EXP_NEW) {
       return { success: false, error: "Choose a bounty experience." };
@@ -89,12 +91,18 @@ export async function updateEmployeeDetails(
         where: { id },
         data: {
           fullName,
-          role: input.role === "Helper" ? "HELPER" : "DRIVER",
+          role: toDbRole(input.role),
           bountyExp: input.bountyExp,
           isActive: input.isActive,
           isRegular: input.isRegular === true,
         },
       });
+    });
+
+    // Keep the login's access in step with the role. Admin logins are left alone.
+    await prisma.profile.updateMany({
+      where: { employeeId: id, role: { not: "ADMIN" } },
+      data: { role: input.role === "Secretary" ? "SECRETARY" : "EMPLOYEE" },
     });
 
     revalidatePath("/admin/employees");
@@ -319,7 +327,7 @@ function revalidateRoster(id?: string) {
 
 export interface NewEmployeeInput {
   name: string;
-  role: "Driver" | "Helper";
+  role: EmployeeRole;
   bountyExp: string;
   remarks: string;
   createLogin: boolean;
@@ -341,8 +349,8 @@ export async function createEmployee(input: NewEmployeeInput): Promise<CreateEmp
 
     const fullName = input.name.trim().replace(/\s+/g, " ");
     if (!fullName) return { success: false, error: "Name is required." };
-    if (input.role !== "Driver" && input.role !== "Helper") {
-      return { success: false, error: "Role must be Driver or Helper." };
+    if (!EMPLOYEE_ROLES.includes(input.role)) {
+      return { success: false, error: "Role must be Driver, Helper or Secretary." };
     }
     if (input.bountyExp !== BOUNTY_EXP_OLD && input.bountyExp !== BOUNTY_EXP_NEW) {
       return { success: false, error: "Choose a bounty experience." };
@@ -359,7 +367,7 @@ export async function createEmployee(input: NewEmployeeInput): Promise<CreateEmp
     const created = await prisma.employee.create({
       data: {
         fullName,
-        role: input.role === "Helper" ? "HELPER" : "DRIVER",
+        role: toDbRole(input.role),
         bountyExp: input.bountyExp,
         isActive: true,
         remarks: trimOrNull(input.remarks),
@@ -398,7 +406,13 @@ export async function createEmployeeLogin(id: string): Promise<CredentialsResult
 
     const employee = await prisma.employee.findUnique({
       where: { id },
-      select: { id: true, fullName: true, isActive: true, profile: { select: { id: true } } },
+      select: {
+        id: true,
+        fullName: true,
+        role: true,
+        isActive: true,
+        profile: { select: { id: true } },
+      },
     });
     if (!employee) return { success: false, error: "Employee not found." };
     if (employee.profile) return { success: false, error: "This employee already has a login." };
@@ -481,7 +495,7 @@ export async function resetEmployeePassword(id: string): Promise<CredentialsResu
 export interface EmployeeLoginRow extends StoredCredentials {
   employeeId: string;
   name: string;
-  role: "Driver" | "Helper";
+  role: EmployeeRole;
   isActive: boolean;
 }
 
@@ -514,7 +528,7 @@ export async function getAllEmployeeCredentials(): Promise<AllCredentialsResult>
               {
                 employeeId: employee.id,
                 name: employee.fullName,
-                role: employee.role === "HELPER" ? ("Helper" as const) : ("Driver" as const),
+                role: toUiRole(employee.role),
                 isActive: employee.isActive,
                 email: employee.profile.email,
                 ...readStoredPassword(employee.profile.encryptedPassword),

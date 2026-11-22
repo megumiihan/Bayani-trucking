@@ -39,6 +39,7 @@ export default async function RootLayout({
               email: user.email,
               role: user.role,
               employeeName: user.employeeName,
+              isDriver: user.isDriver,
             }}
           >
             <AppShell>{children}</AppShell>

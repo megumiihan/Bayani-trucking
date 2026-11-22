@@ -4,14 +4,20 @@ import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import {
+  billableAmountDue,
   computeBillableBreakdown,
+  roundMoney,
   type BillableUi,
   type BillableWriteInput,
   type CollectionReceiptUi,
   type CollectionReceiptWriteInput,
   type DisbursementUi,
   type DisbursementWriteInput,
+  type NewTemporaryClientInput,
 } from "@/lib/bookkeeping";
+import { formatTin } from "@/lib/clientDirectory";
+import type { Client } from "@/lib/clients";
+import { mapClientToUi } from "@/lib/mappers/client";
 import {
   billableInclude,
   bookkeepingActorInclude,
@@ -24,6 +30,69 @@ import { prisma } from "@/lib/prisma";
 
 function revalidateBookkeeping() {
   revalidatePath("/admin/bookkeeping");
+}
+
+// ── Client on a billable / receipt: picked from the list, or "Others" ───────
+
+type ClientPlan =
+  | { kind: "existing"; id: string; name: string; isTemporary: boolean }
+  | { kind: "new"; name: string; address: string; tin: string };
+
+/** Validates the client choice without writing anything. */
+async function planClient(
+  clientId: string,
+  newClient: NewTemporaryClientInput | undefined,
+  requiredLabel: string
+): Promise<{ ok: true; plan: ClientPlan } | { ok: false; error: string }> {
+  if (newClient) {
+    const name = newClient.name.trim().replace(/\s+/g, " ");
+    if (!name) return { ok: false, error: "Enter the other client's name." };
+    const address = (newClient.address ?? "").trim();
+    const tin = formatTin(newClient.tin ?? "");
+    const match = await prisma.client.findFirst({
+      where: { name: { equals: name, mode: "insensitive" } },
+      select: { id: true, name: true, isTemporary: true },
+    });
+    if (match && !match.isTemporary) {
+      return {
+        ok: false,
+        error: `"${match.name}" is already a client. Pick it from the list instead of Others.`,
+      };
+    }
+    // Typing a one-off client's name again reuses it instead of duplicating.
+    if (match) return { ok: true, plan: { kind: "existing", ...match } };
+    return { ok: true, plan: { kind: "new", name, address, tin } };
+  }
+
+  if (!clientId) return { ok: false, error: `${requiredLabel} is required.` };
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: { id: true, name: true, isTemporary: true },
+  });
+  if (!client) return { ok: false, error: "Client not found." };
+  return { ok: true, plan: { kind: "existing", ...client } };
+}
+
+/** Creates the planned temporary client inside the caller's transaction. */
+async function materializeClient(
+  tx: Prisma.TransactionClient,
+  plan: ClientPlan
+): Promise<{ id: string; name: string; created: Client | null }> {
+  if (plan.kind === "existing") return { id: plan.id, name: plan.name, created: null };
+  const record = await tx.client.create({
+    data: {
+      name: plan.name,
+      legalName: plan.name,
+      address: plan.address,
+      tin: plan.tin,
+      isTemporary: true,
+    },
+  });
+  return { id: record.id, name: record.name, created: mapClientToUi(record) };
+}
+
+function revalidateClientDirectory() {
+  revalidatePath("/admin/bookkeeping/directory");
 }
 
 function requireDate(date: string, label = "Date") {
@@ -49,7 +118,7 @@ function uniqueConstraintMessage(error: unknown, message: string) {
 }
 
 export type SaveBillableResult =
-  | { success: true; billable: BillableUi }
+  | { success: true; billable: BillableUi; createdClient: Client | null }
   | { success: false; error: string };
 
 type PreparedBillableWrite =
@@ -57,9 +126,7 @@ type PreparedBillableWrite =
       date: Date;
       invoiceNo: string;
       vatRegNo: string;
-      buyerName: string;
       buyerAddress: string;
-      clientId: string;
       totalInvoiceAmt: number;
       taxableAmt: number;
       outputTax: number;
@@ -67,7 +134,7 @@ type PreparedBillableWrite =
       totalTax: number;
       vatDeduction: boolean;
       withholdingTaxDeduction: boolean;
-    } }
+    }; plan: ClientPlan }
   | { ok: false; error: string };
 
 async function prepareBillableWrite(
@@ -83,14 +150,14 @@ async function prepareBillableWrite(
   const buyerAddress = input.buyerAddress.trim();
   if (!invoiceNo) return { ok: false, error: "Invoice no. is required." };
   if (!vatRegNo) return { ok: false, error: "VAT Reg. No. is required." };
-  if (!input.clientId) return { ok: false, error: "Buyer name is required." };
   if (!buyerAddress) return { ok: false, error: "Buyer address is required." };
 
-  const client = await prisma.client.findUnique({
-    where: { id: input.clientId },
-    select: { id: true, name: true },
-  });
-  if (!client) return { ok: false, error: "Client not found." };
+  const planned = await planClient(
+    input.clientId,
+    input.newClient && { ...input.newClient, address: buyerAddress, tin: vatRegNo },
+    "Buyer name"
+  );
+  if (!planned.ok) return planned;
 
   const breakdown = computeBillableBreakdown(
     input.totalInvoiceAmt,
@@ -104,9 +171,7 @@ async function prepareBillableWrite(
       date: new Date(input.date),
       invoiceNo,
       vatRegNo,
-      buyerName: client.name,
       buyerAddress,
-      clientId: client.id,
       totalInvoiceAmt: input.totalInvoiceAmt,
       taxableAmt: breakdown.taxableAmt,
       outputTax: breakdown.outputTax,
@@ -115,6 +180,7 @@ async function prepareBillableWrite(
       vatDeduction: input.vatDeduction,
       withholdingTaxDeduction: input.withholdingTaxDeduction,
     },
+    plan: planned.plan,
   };
 }
 
@@ -126,16 +192,23 @@ export async function saveBillable(
     const prepared = await prepareBillableWrite(input);
     if (!prepared.ok) return { success: false, error: prepared.error };
 
-    const record = await prisma.billable.create({
-      data: {
-        ...prepared.data,
-        createdById: user.id,
-      },
-      include: billableInclude,
+    const { record, created } = await prisma.$transaction(async (tx) => {
+      const client = await materializeClient(tx, prepared.plan);
+      const record = await tx.billable.create({
+        data: {
+          ...prepared.data,
+          clientId: client.id,
+          buyerName: client.name,
+          createdById: user.id,
+        },
+        include: billableInclude,
+      });
+      return { record, created: client.created };
     });
 
     revalidateBookkeeping();
-    return { success: true, billable: mapBillableToUi(record) };
+    if (created) revalidateClientDirectory();
+    return { success: true, billable: mapBillableToUi(record), createdClient: created };
   } catch (error) {
     const duplicate = uniqueConstraintMessage(
       error,
@@ -169,14 +242,19 @@ export async function updateBillable(
     });
     if (!existing) return { success: false, error: "Billable not found." };
 
-    const record = await prisma.billable.update({
-      where: { id },
-      data: prepared.data,
-      include: billableInclude,
+    const { record, created } = await prisma.$transaction(async (tx) => {
+      const client = await materializeClient(tx, prepared.plan);
+      const record = await tx.billable.update({
+        where: { id },
+        data: { ...prepared.data, clientId: client.id, buyerName: client.name },
+        include: billableInclude,
+      });
+      return { record, created: client.created };
     });
 
     revalidateBookkeeping();
-    return { success: true, billable: mapBillableToUi(record) };
+    if (created) revalidateClientDirectory();
+    return { success: true, billable: mapBillableToUi(record), createdClient: created };
   } catch (error) {
     const duplicate = uniqueConstraintMessage(
       error,
@@ -207,9 +285,15 @@ export async function deleteBillable(
 
     const existing = await prisma.billable.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, collectionItem: { select: { receipt: { select: { orNumber: true } } } } },
     });
     if (!existing) return { success: false, error: "Billable not found." };
+    if (existing.collectionItem) {
+      return {
+        success: false,
+        error: `This SI was collected on OR ${existing.collectionItem.receipt.orNumber}, so it can't be deleted.`,
+      };
+    }
 
     await prisma.billable.delete({ where: { id } });
     revalidateBookkeeping();
@@ -248,6 +332,8 @@ export async function saveDisbursement(
         payee,
         amount: input.amount,
         referenceNo: input.referenceNo?.trim() || null,
+        invoiceNo: input.invoiceNo?.trim() || "",
+        vatRegNo: input.vatRegNo?.trim() || "",
         description: input.description?.trim() || null,
         createdById: user.id,
       },
@@ -269,7 +355,7 @@ export async function saveDisbursement(
 }
 
 export type SaveCollectionReceiptResult =
-  | { success: true; receipt: CollectionReceiptUi }
+  | { success: true; receipt: CollectionReceiptUi; createdClient: Client | null }
   | { success: false; error: string };
 
 export async function saveCollectionReceipt(
@@ -277,16 +363,14 @@ export async function saveCollectionReceipt(
 ): Promise<SaveCollectionReceiptResult> {
   try {
     const user = await requireAdmin();
-    const invalid =
-      requireDate(input.datePaid, "Date paid") ??
-      requirePositiveAmount(input.collectionAmount, "collection amount");
+    const invalid = requireDate(input.datePaid, "Date paid");
     if (invalid) return { success: false, error: invalid };
+    const billableIds = [...new Set(input.billableIds ?? [])];
 
     const orNumber = input.orNumber.trim();
     const paymentDetails = input.paymentDetails.trim();
     const whoPaid = input.whoPaid.trim();
     const whoReceived = input.whoReceived.trim();
-    if (!input.clientId) return { success: false, error: "Client is required." };
     if (!orNumber) return { success: false, error: "OR number is required." };
     if (!paymentDetails) {
       return { success: false, error: "Payment details are required." };
@@ -296,33 +380,94 @@ export async function saveCollectionReceipt(
       return { success: false, error: "Who received is required." };
     }
 
-    const client = await prisma.client.findUnique({
-      where: { id: input.clientId },
-      select: { id: true, name: true },
-    });
-    if (!client) return { success: false, error: "Client not found." };
+    const planned = await planClient(input.clientId, input.newClient, "Client");
+    if (!planned.ok) return { success: false, error: planned.error };
+    const plan = planned.plan;
+    const isTemporary = plan.kind === "new" || plan.isTemporary;
 
-    const record = await prisma.collectionReceipt.create({
-      data: {
-        datePaid: new Date(input.datePaid),
-        orNumber,
-        collectionAmount: input.collectionAmount,
-        paymentDetails,
-        whoPaid,
-        whoReceived,
-        clientId: client.id,
-        clientName: client.name,
-        createdById: user.id,
+    // Only one-off clients may be paid without an SI; their amount is typed in.
+    let manualAmount: number | null = null;
+    if (billableIds.length === 0) {
+      if (!isTemporary) {
+        return { success: false, error: "Select at least one SI / invoice number." };
+      }
+      const amount = input.collectionAmount ?? NaN;
+      const invalidAmount = requirePositiveAmount(amount, "collection amount");
+      if (invalidAmount) return { success: false, error: invalidAmount };
+      manualAmount = roundMoney(amount);
+    }
+
+    const billables = await prisma.billable.findMany({
+      where: { id: { in: billableIds } },
+      select: {
+        id: true,
+        clientId: true,
+        invoiceNo: true,
+        buyerName: true,
+        buyerAddress: true,
+        vatRegNo: true,
+        totalInvoiceAmt: true,
+        withholdingTax: true,
+        collectionItem: { select: { receipt: { select: { orNumber: true } } } },
       },
-      include: collectionReceiptInclude,
+    });
+    if (billables.length !== billableIds.length) {
+      return { success: false, error: "One of the selected invoices no longer exists." };
+    }
+    const otherClient = billables.find((b) => plan.kind === "new" || b.clientId !== plan.id);
+    if (otherClient) {
+      return {
+        success: false,
+        error: `SI ${otherClient.invoiceNo} belongs to a different client.`,
+      };
+    }
+    const collected = billables.find((b) => b.collectionItem);
+    if (collected) {
+      return {
+        success: false,
+        error: `SI ${collected.invoiceNo} was already collected on OR ${collected.collectionItem!.receipt.orNumber}.`,
+      };
+    }
+
+    const items = billables.map((b) => ({
+      billableId: b.id,
+      invoiceNo: b.invoiceNo,
+      buyerName: b.buyerName,
+      buyerAddress: b.buyerAddress,
+      vatRegNo: b.vatRegNo,
+      amountDue: billableAmountDue(b.totalInvoiceAmt, b.withholdingTax),
+    }));
+    // Total collection = sum of each SI's total amount due.
+    const collectionAmount =
+      manualAmount ?? roundMoney(items.reduce((sum, item) => sum + item.amountDue, 0));
+
+    const { record, created } = await prisma.$transaction(async (tx) => {
+      const client = await materializeClient(tx, plan);
+      const record = await tx.collectionReceipt.create({
+        data: {
+          datePaid: new Date(input.datePaid),
+          orNumber,
+          collectionAmount,
+          items: { create: items },
+          paymentDetails,
+          whoPaid,
+          whoReceived,
+          clientId: client.id,
+          clientName: client.name,
+          createdById: user.id,
+        },
+        include: collectionReceiptInclude,
+      });
+      return { record, created: client.created };
     });
 
     revalidateBookkeeping();
-    return { success: true, receipt: mapCollectionReceiptToUi(record) };
+    if (created) revalidateClientDirectory();
+    return { success: true, receipt: mapCollectionReceiptToUi(record), createdClient: created };
   } catch (error) {
     const duplicate = uniqueConstraintMessage(
       error,
-      "An entry with this OR number already exists."
+      "That OR number is already used, or one of the SIs was just collected on another receipt."
     );
     if (duplicate) return { success: false, error: duplicate };
 

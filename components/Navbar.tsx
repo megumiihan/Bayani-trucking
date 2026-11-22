@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useRole, type ViewRole } from "@/context/RoleContext";
 import { signOut } from "@/lib/actions/auth";
 
-const navLinks = {
+export const navLinks = {
   employee: [
     { href: "/employee/shipments/new", label: "New Shipment" },
     { href: "/employee/profile", label: "Profile & Earnings" },
@@ -14,16 +14,33 @@ const navLinks = {
     { href: "/", label: "Master Dashboard" },
     { href: "/admin/employees", label: "Employees" },
     { href: "/admin/trucks", label: "Trucks" },
+    { href: "/admin/clients", label: "Clients" },
     { href: "/admin/bookkeeping", label: "Bookkeeping" },
+    // Hidden for now; the page still exists at /admin/leads.
+    // { href: "/admin/leads", label: "Leads" },
     { href: "/admin/routes", label: "Routes & Rates" },
+  ],
+  secretary: [
+    { href: "/", label: "Shipments" },
+    { href: "/employee/shipments/new", label: "Log Shipment" },
+    { href: "/admin/employees", label: "Employees" },
+    { href: "/admin/trucks", label: "Trucks" },
   ],
 };
 
+export function isLinkActive(pathname: string, href: string) {
+  return href === "/" ? pathname === "/" : pathname.startsWith(href);
+}
+
 export default function Navbar() {
-  const { role, setRole, isAdmin, email } = useRole();
+  const { role, setRole, isAdmin, isDriver, email } = useRole();
   const pathname = usePathname();
   const router = useRouter();
-  const links = navLinks[role];
+  // Drivers (and admins previewing the employee view) get the maintenance board.
+  const links =
+    role === "employee" && (isDriver || isAdmin)
+      ? [...navLinks.employee, { href: "/admin/trucks", label: "Trucks" }]
+      : navLinks[role];
 
   const handleRoleChange = (nextRole: ViewRole) => {
     setRole(nextRole);
@@ -112,39 +129,45 @@ export default function Navbar() {
   );
 }
 
-function RoleSwitcher({
+const ROLE_OPTIONS: { value: ViewRole; label: string }[] = [
+  { value: "employee", label: "Employee" },
+  { value: "secretary", label: "Secretary" },
+  { value: "admin", label: "Admin" },
+];
+
+export function RoleSwitcher({
   role,
   onChange,
+  stacked = false,
 }: {
   role: ViewRole;
   onChange: (role: ViewRole) => void;
+  /** Label above full-width buttons (for the narrow sidebar). */
+  stacked?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="hidden text-xs text-gray-500 sm:block">View as</span>
+    <div className={stacked ? "space-y-1.5" : "flex items-center gap-2"}>
+      <span className={`text-xs text-gray-500 ${stacked ? "block px-1" : "hidden sm:block"}`}>
+        View as
+      </span>
       <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
-        <button
-          type="button"
-          onClick={() => onChange("employee")}
-          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-[color,background-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 ${
-            role === "employee"
-              ? "bg-white text-blue-700 shadow-sm"
-              : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          Employee
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange("admin")}
-          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-[color,background-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 ${
-            role === "admin"
-              ? "bg-white text-blue-700 shadow-sm"
-              : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          Admin
-        </button>
+        {ROLE_OPTIONS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+            aria-pressed={role === option.value}
+            className={`rounded-md py-1.5 text-xs font-medium transition-[color,background-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 ${
+              stacked ? "flex-1 px-1.5" : "px-3"
+            } ${
+              role === option.value
+                ? "bg-white text-blue-700 shadow-sm"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
       </div>
     </div>
   );

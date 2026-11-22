@@ -2,6 +2,7 @@ import type {
   Billable,
   Client,
   CollectionReceipt,
+  CollectionReceiptItem,
   Disbursement,
   Profile,
 } from "@prisma/client";
@@ -26,6 +27,7 @@ export const billableInclude = {
 export const collectionReceiptInclude = {
   ...bookkeepingActorInclude,
   client: { select: { id: true, name: true } },
+  items: { orderBy: { invoiceNo: "asc" } },
 } as const;
 
 type BookkeepingActor = Pick<Profile, "email"> & {
@@ -76,6 +78,8 @@ export function mapDisbursementToUi(
     payee: record.payee,
     amount: record.amount,
     referenceNo: record.referenceNo ?? "",
+    invoiceNo: record.invoiceNo,
+    vatRegNo: record.vatRegNo,
     description: record.description ?? "",
     createdByName: actorName(record.createdBy),
   };
@@ -85,6 +89,7 @@ export function mapCollectionReceiptToUi(
   record: CollectionReceipt & {
     createdBy: BookkeepingActor;
     client: Pick<Client, "id" | "name"> | null;
+    items: CollectionReceiptItem[];
   }
 ): CollectionReceiptUi {
   return {
@@ -98,5 +103,14 @@ export function mapCollectionReceiptToUi(
     clientId: record.clientId,
     clientName: record.client?.name || record.clientName,
     createdByName: actorName(record.createdBy),
+    items: record.items.map((item) => ({
+      id: item.id,
+      billableId: item.billableId,
+      invoiceNo: item.invoiceNo,
+      buyerName: item.buyerName,
+      buyerAddress: item.buyerAddress,
+      vatRegNo: item.vatRegNo,
+      amountDue: item.amountDue,
+    })),
   };
 }

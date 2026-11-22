@@ -17,6 +17,7 @@ export function mapTruckToUi(record: DbTruck): Truck {
     isActive: record.isActive,
     purchaseYear: record.purchaseYear,
     purchasePrice: record.purchasePrice,
+    soldYear: record.soldYear,
     hasCertificate: Boolean(record.certificatePath),
     certificateName: record.certificateName,
   };

@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import type { PrismaClient } from "@prisma/client";
+import type { EmployeeRole, PrismaClient } from "@prisma/client";
 import { randomInt } from "node:crypto";
 import { encryptPassword } from "./credentialCrypto";
 
@@ -72,7 +72,7 @@ export interface LoginCredentials {
  */
 export async function provisionLogin(
   prisma: PrismaClient,
-  employee: { id: string; fullName: string },
+  employee: { id: string; fullName: string; role?: EmployeeRole },
   options: { email?: string; password?: string } = {}
 ): Promise<LoginCredentials> {
   // Fail before touching Supabase if passwords can't be stored.
@@ -100,7 +100,7 @@ export async function provisionLogin(
       data: {
         id: data.user.id,
         email,
-        role: "EMPLOYEE",
+        role: employee.role === "SECRETARY" ? "SECRETARY" : "EMPLOYEE",
         employeeId: employee.id,
         encryptedPassword,
       },

@@ -179,3 +179,29 @@ export function resolveShipmentRate(
 export function getExtraHelperRateForClient(rate: DestinationRouteRate): number {
   return rate.extraHelperBaseRate;
 }
+
+/** Unique destination route names for a client from a DB-backed route list. */
+export function uniqueDestinationRouteNames(
+  routes: DestinationRouteRate[],
+  client: string
+): string[] {
+  const names = new Set(
+    routes
+      .filter((rate) => rate.client === client && rate.weightKg == null)
+      .map((rate) => rate.routeName)
+  );
+  return Array.from(names).sort((a, b) => a.localeCompare(b));
+}
+
+/** Pick the default (shortest distance band) rate for a route from a DB-backed list. */
+export function pickDefaultRouteRate<
+  T extends Pick<DestinationRouteRate, "distance">,
+>(matches: T[]): T | undefined {
+  if (matches.length === 0) return undefined;
+  if (matches.length === 1) return matches[0];
+  const order = (distance: string) => {
+    const index = DISTANCE_BAND_ORDER.indexOf(distance);
+    return index === -1 ? DISTANCE_BAND_ORDER.length : index;
+  };
+  return [...matches].sort((a, b) => order(a.distance) - order(b.distance))[0];
+}

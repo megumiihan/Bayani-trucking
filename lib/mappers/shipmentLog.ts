@@ -31,6 +31,7 @@ export function mapShipmentLogToShipment(
     payoutStatus: "Pending",
     flagged: record.isFlagged,
     approved: record.isApproved,
+    secretaryApproved: record.isSecretaryApproved,
     createdAt: record.createdAt.toISOString(),
     uploadedByUserId: record.createdById,
     uploadedByName,

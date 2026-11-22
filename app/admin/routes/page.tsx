@@ -1,3 +1,4 @@
+import { requirePageRole } from "@/lib/auth";
 import { getClients } from "@/lib/queries/clients";
 import { getDestinationRoutes } from "@/lib/queries/routes";
 import {
@@ -14,6 +15,7 @@ import PageHeader from "@/components/ui/PageHeader";
 export const dynamic = "force-dynamic";
 
 export default async function RoutesPage() {
+  await requirePageRole(["admin"]);
   const [destinationRates, allClients] = await Promise.all([
     getDestinationRoutes(),
     getClients(),

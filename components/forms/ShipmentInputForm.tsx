@@ -14,12 +14,10 @@ import {
 import { LIVESTOCK_MAX_HEADS } from "@/lib/livestock";
 import type { DestinationRouteRate } from "@/lib/rates";
 import {
-  getUniqueRouteNamesForClient,
-  getDefaultRouteRate,
-  type DestinationClient,
+  pickDefaultRouteRate,
+  uniqueDestinationRouteNames,
 } from "@/lib/rates";
 import {
-  calculateDestinationPayout,
   calculateLivestockPayout,
   calculatePlatformPayout,
   calculateWeightPayout,
@@ -60,7 +58,9 @@ export default function ShipmentInputForm({
   routes,
 }: ShipmentInputFormProps) {
   const router = useRouter();
-  const { isAdmin } = useRole();
+  const { isAdmin: isRealAdmin, isSecretary } = useRole();
+  // Office roles see the payout preview while logging.
+  const isAdmin = isRealAdmin || isSecretary;
 
   const defaultClient = clients[0];
 
@@ -149,17 +149,24 @@ export default function ShipmentInputForm({
 
   const routeOptions = useMemo(() => {
     if (usesDestinationRates) {
-      return getUniqueRouteNamesForClient(form.client as DestinationClient);
+      return uniqueDestinationRouteNames(routes, form.client);
     }
     return [];
-  }, [form.client, usesDestinationRates]);
+  }, [form.client, routes, usesDestinationRates]);
 
   const selectedRoute = useMemo(
     () =>
       usesDestinationRates && form.farthestRoute
-        ? getDefaultRouteRate(form.client as DestinationClient, form.farthestRoute)
+        ? pickDefaultRouteRate(
+            routes.filter(
+              (route) =>
+                route.client === form.client &&
+                route.routeName === form.farthestRoute &&
+                route.weightKg == null
+            )
+          )
         : undefined,
-    [form.client, form.farthestRoute, usesDestinationRates]
+    [form.client, form.farthestRoute, routes, usesDestinationRates]
   );
 
   const payoutPreview = useMemo(() => {
@@ -208,13 +215,13 @@ export default function ShipmentInputForm({
       });
     }
     if (usesDestinationRates && form.farthestRoute && selectedRoute) {
-      return calculateDestinationPayout({
-        client: form.client as DestinationClient,
-        routeName: form.farthestRoute,
-        distance: selectedRoute.distance,
-        hasExtraHelper: form.hasExtraHelper,
-        hasHelper,
-      });
+      return {
+        driverPayout: selectedRoute.driverBaseRate,
+        helperPayout: hasHelper ? selectedRoute.helperBaseRate : 0,
+        extraHelperPayout: form.hasExtraHelper
+          ? selectedRoute.extraHelperBaseRate
+          : 0,
+      };
     }
     return null;
   }, [

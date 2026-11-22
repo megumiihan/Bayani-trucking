@@ -15,6 +15,8 @@ import { formatCurrency } from "@/lib/mockData";
 import { formatTruckLabel, type Truck } from "@/lib/trucks";
 import { inputClass } from "@/components/ui/formStyles";
 import { useEscapeToClose } from "@/components/ui/useEscapeToClose";
+import SupplierPicker from "@/components/admin/SupplierPicker";
+import type { Supplier } from "@/lib/suppliers";
 
 interface LogExpenseModalProps {
   isOpen: boolean;
@@ -22,6 +24,7 @@ interface LogExpenseModalProps {
   error: string | null;
   employees: Employee[];
   trucks: Truck[];
+  suppliers: Supplier[];
   expense?: ExpenseUi | null;
   onClose: () => void;
   onSave: (input: ExpenseWriteInput) => Promise<void>;
@@ -37,6 +40,7 @@ export default function LogExpenseModal({
   error,
   employees,
   trucks,
+  suppliers,
   expense,
   onClose,
   onSave,
@@ -203,6 +207,14 @@ export default function LogExpenseModal({
               className={inputClass}
             />
           </label>
+
+          <SupplierPicker
+            suppliers={suppliers}
+            onPick={(supplier) => {
+              setAddress([supplier.name, supplier.address].filter(Boolean).join(", "));
+              setVatRegNo(supplier.tin);
+            }}
+          />
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-gray-700">

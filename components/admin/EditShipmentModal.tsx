@@ -12,10 +12,7 @@ import { LIVESTOCK_MAX_HEADS } from "@/lib/livestock";
 import type { DestinationRouteRate } from "@/lib/rates";
 import { uniqueWeightRouteNames, weightTiersForRoute } from "@/lib/weight";
 import { formatTruckLabel, type Truck } from "@/lib/trucks";
-import {
-  getUniqueRouteNamesForClient,
-  type DestinationClient,
-} from "@/lib/rates";
+import { uniqueDestinationRouteNames } from "@/lib/rates";
 import type { UpdateShipmentInput } from "@/lib/actions/shipment";
 import SearchableSelect from "@/components/ui/SearchableSelect";
 import { inputClass } from "@/components/ui/formStyles";
@@ -32,6 +29,8 @@ interface EditShipmentModalProps {
     id: string,
     updates: UpdateShipmentInput
   ) => Promise<{ success: boolean; error?: string }>;
+  /** Secretary: the checkbox is a pre-approval and can't change the admin's approval. */
+  mode?: "admin" | "secretary";
 }
 
 type EditForm = {
@@ -51,6 +50,7 @@ type EditForm = {
   remarks: string;
   flagged: boolean;
   approved: boolean;
+  secretaryApproved: boolean;
   pigheadCount: string;
   platformRate: string;
   weightKg: string;
@@ -74,6 +74,7 @@ function toForm(shipment: Shipment): EditForm {
     remarks: shipment.remarks,
     flagged: shipment.flagged,
     approved: shipment.approved,
+    secretaryApproved: shipment.secretaryApproved === true,
     pigheadCount: shipment.pigheadCount != null ? String(shipment.pigheadCount) : "",
     platformRate: shipment.platformRate != null ? String(shipment.platformRate) : "",
     weightKg: shipment.weightKg != null ? String(shipment.weightKg) : "",
@@ -88,7 +89,9 @@ export default function EditShipmentModal({
   routes,
   onClose,
   onSave,
+  mode = "admin",
 }: EditShipmentModalProps) {
+  const isSecretary = mode === "secretary";
   const [form, setForm] = useState<EditForm | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -145,7 +148,7 @@ export default function EditShipmentModal({
   );
   const livestockRoutes = routes.filter((route) => route.client === form.client);
   const routeOptions = usesDestinationRates
-    ? getUniqueRouteNamesForClient(form.client as DestinationClient)
+    ? uniqueDestinationRouteNames(routes, form.client)
     : [];
 
   const updateField = <K extends keyof EditForm>(key: K, value: EditForm[K]) => {
@@ -203,6 +206,7 @@ export default function EditShipmentModal({
       remarks: form.remarks,
       flagged: form.flagged,
       approved: form.approved,
+      secretaryApproved: form.secretaryApproved,
       pigheadCount: usesLivestockRates ? Number(form.pigheadCount) : null,
       platformRate: usesPlatformRates ? Number(form.platformRate) : null,
       weightKg: usesWeightRates ? Number(form.weightKg) : null,
@@ -560,20 +564,44 @@ export default function EditShipmentModal({
                 />
                 Flagged
               </label>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={form.approved}
-                  onChange={(e) => updateField("approved", e.target.checked)}
-                  className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                />
-                Approved
-              </label>
+              {isSecretary ? (
+                form.approved ? (
+                  <span className="text-sm font-medium text-emerald-700">✓ Approved by admin</span>
+                ) : (
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={form.secretaryApproved}
+                      onChange={(e) => updateField("secretaryApproved", e.target.checked)}
+                      className="rounded border-gray-300 text-yellow-500 focus:ring-yellow-400"
+                    />
+                    Pre-approved
+                  </label>
+                )
+              ) : (
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={form.approved}
+                    onChange={(e) => updateField("approved", e.target.checked)}
+                    className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                  />
+                  Approved
+                  {!form.approved && form.secretaryApproved && (
+                    <span className="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-semibold text-yellow-800">
+                      Pre-approved
+                    </span>
+                  )}
+                </label>
+              )}
             </div>
 
             <p className="text-xs text-gray-500">
               Changing the client or route recalculates driver and helper
               payouts from the current rate sheet.
+              {isSecretary &&
+                form.approved &&
+                " If your change affects payouts, the shipment goes back to the admin for approval."}
             </p>
 
             {error && (

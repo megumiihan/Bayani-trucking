@@ -6,10 +6,14 @@ import { useRef, useState, type ReactNode } from "react";
 import { useRole } from "@/context/RoleContext";
 import {
   deleteTruckCheck,
+  deleteTruckFuel,
   deleteTruckRepair,
   getTruckCertificateUrl,
+  getTruckDocumentUrl,
   removeTruckCertificate,
+  removeTruckDocument,
   saveTruckCheck,
+  saveTruckFuel,
   saveTruckRepair,
   updateTruckDetails,
   updateTruckRepair,
@@ -18,24 +22,30 @@ import {
 import { formatCurrency, type Shipment } from "@/lib/mockData";
 import { resizeImageToFit } from "@/lib/resizeImage";
 import {
-  CHECK_ITEMS,
   TRUCK_CERTIFICATE_MAX_BYTES,
   TRUCK_CERTIFICATE_MAX_SIDE,
+  TRUCK_DOCUMENT_TYPES,
   formatShortDate,
   getScheduleStatus,
   getTruckAlerts,
   maintenanceTypeLabel,
+  renewalState,
+  type MaintenanceConfig,
   type ScheduleState,
 } from "@/lib/truckMaintenance";
 import type {
   CheckWriteInput,
+  FuelWriteInput,
   RepairWriteInput,
   TruckCheckUi,
+  TruckDocumentUi,
   TruckFuelEntry,
   TruckRepairUi,
 } from "@/lib/truckRecords";
 import type { Truck } from "@/lib/trucks";
 import TruckCheckModal from "@/components/admin/TruckCheckModal";
+import TruckDocumentModal from "@/components/admin/TruckDocumentModal";
+import TruckFuelModal from "@/components/admin/TruckFuelModal";
 import TruckRepairModal from "@/components/admin/TruckRepairModal";
 
 interface AdminTruckDetailProps {
@@ -43,7 +53,12 @@ interface AdminTruckDetailProps {
   repairs: TruckRepairUi[];
   checks: TruckCheckUi[];
   fuel: TruckFuelEntry[];
+  /** Title, LTFRB, NMIS, insurance. File details are blanked for non-admins. */
+  documents: TruckDocumentUi[];
   shipments: Shipment[];
+  config: MaintenanceConfig;
+  /** Signed-in user is an admin: may edit details, open files and correct or delete records. */
+  canManage: boolean;
 }
 
 type Tab = "repairs" | "fuel" | "shipments";
@@ -62,9 +77,15 @@ export default function AdminTruckDetail({
   repairs,
   checks,
   fuel,
+  documents,
   shipments,
+  config,
+  canManage,
 }: AdminTruckDetailProps) {
   const { role } = useRole();
+  // Secretary and drivers (and admins previewing their view) only log fuel, repairs and checks.
+  // Truck details, the certificate file and corrections/deletes are admin-only.
+  const isAdminView = canManage && role === "admin";
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("repairs");
 
@@ -83,13 +104,10 @@ export default function AdminTruckDetail({
 
   const [listError, setListError] = useState<string | null>(null);
 
-  if (role !== "admin") {
-    return (
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-amber-800">
-        Admin access required. Switch to Admin view using the role toggle.
-      </div>
-    );
-  }
+  // Fuel modal
+  const [isFuelOpen, setIsFuelOpen] = useState(false);
+  const [isSavingFuel, setIsSavingFuel] = useState(false);
+  const [fuelError, setFuelError] = useState<string | null>(null);
 
   const lastDoneByType: Record<string, string> = {};
   for (const repair of repairs) {
@@ -98,8 +116,11 @@ export default function AdminTruckDetail({
     }
   }
   const latestCheck = checks[0] ?? null;
-  const schedule = getScheduleStatus(truck.truckType, lastDoneByType);
-  const alerts = truck.isActive ? getTruckAlerts(truck.truckType, lastDoneByType, latestCheck) : [];
+  const schedule = getScheduleStatus(config.types, truck.truckType, lastDoneByType);
+  const documentDueDates = Object.fromEntries(documents.map((doc) => [doc.docType, doc.renewalDueDate]));
+  const alerts = truck.isActive
+    ? getTruckAlerts(config, truck.truckType, lastDoneByType, latestCheck, documentDueDates)
+    : [];
   const requiredCount = alerts.filter((a) => a.level === "required").length;
 
   const repairTotal = repairs.reduce((sum, r) => sum + r.cost, 0);
@@ -133,6 +154,33 @@ export default function AdminTruckDetail({
     if (!window.confirm(message)) return;
     setListError(null);
     const result = await deleteTruckRepair(repair.id);
+    if (!result.success) return setListError(result.error);
+    router.refresh();
+  };
+
+  const handleSaveFuel = async (input: FuelWriteInput) => {
+    setIsSavingFuel(true);
+    setFuelError(null);
+    const result = await saveTruckFuel(truck.id, input);
+    setIsSavingFuel(false);
+    if (!result.success) {
+      setFuelError(result.error);
+      return;
+    }
+    setIsFuelOpen(false);
+    setTab("fuel");
+    router.refresh();
+  };
+
+  const handleDeleteFuel = async (entry: TruckFuelEntry) => {
+    if (
+      !window.confirm(
+        `Delete the ${formatCurrency(entry.amount)} fuel entry from ${fmt(entry.date)}? It is removed from Bookkeeping too.`
+      )
+    )
+      return;
+    setListError(null);
+    const result = await deleteTruckFuel(entry.id);
     if (!result.success) return setListError(result.error);
     router.refresh();
   };
@@ -173,6 +221,7 @@ export default function AdminTruckDetail({
         error={repairError}
         plateNumber={truck.plateNumber}
         truckType={truck.truckType}
+        types={config.types}
         repair={repairModal.repair}
         onClose={() => setRepairModal({ open: false, repair: null })}
         onSave={handleSaveRepair}
@@ -183,12 +232,27 @@ export default function AdminTruckDetail({
         error={checkError}
         plateNumber={truck.plateNumber}
         truckType={truck.truckType}
+        checkItems={config.checkItems}
         onClose={() => setIsCheckOpen(false)}
         onSave={handleSaveCheck}
       />
+      <TruckFuelModal
+        isOpen={isFuelOpen}
+        isSaving={isSavingFuel}
+        error={fuelError}
+        plateNumber={truck.plateNumber}
+        onClose={() => setIsFuelOpen(false)}
+        onSave={handleSaveFuel}
+      />
 
       <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <TruckProfileCard key={truck.id} truck={truck} lastMaintenance={repairs[0]?.date ?? null} />
+        <TruckProfileCard
+          key={truck.id}
+          truck={truck}
+          lastMaintenance={repairs[0]?.date ?? null}
+          documents={documents}
+          canManage={isAdminView}
+        />
 
         <div className="flex min-w-0 flex-col gap-6">
           {/* Maintenance schedule */}
@@ -206,13 +270,25 @@ export default function AdminTruckDetail({
                         : "Up to date"}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => openRepair(null)}
-                className="rounded-lg bg-blue-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-800"
-              >
-                Log repair / maintenance
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFuelError(null);
+                    setIsFuelOpen(true);
+                  }}
+                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Log fuel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openRepair(null)}
+                  className="rounded-lg bg-blue-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-800"
+                >
+                  Log repair / maintenance
+                </button>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
@@ -276,7 +352,7 @@ export default function AdminTruckDetail({
             {latestCheck ? (
               <div className="px-6 py-4">
                 <ul className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
-                  {CHECK_ITEMS.filter((item) => latestCheck.items[item.key]).map((item) => {
+                  {config.checkItems.filter((item) => latestCheck.items[item.key]).map((item) => {
                     const ok = latestCheck.items[item.key] === "ok";
                     return (
                       <li key={item.key} className="flex items-center gap-2 text-sm">
@@ -310,26 +386,30 @@ export default function AdminTruckDetail({
                                 {issues ? `${issues} issue${issues === 1 ? "" : "s"}` : "All OK"}
                               </span>
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteCheck(check)}
-                              className="text-xs text-gray-400 hover:text-red-600"
-                            >
-                              Delete
-                            </button>
+                            {isAdminView && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCheck(check)}
+                                className="text-xs text-gray-400 hover:text-red-600"
+                              >
+                                Delete
+                              </button>
+                            )}
                           </li>
                         );
                       })}
                     </ul>
                   </details>
                 )}
-                <button
-                  type="button"
-                  onClick={() => handleDeleteCheck(latestCheck)}
-                  className="mt-3 text-xs text-gray-400 hover:text-red-600"
-                >
-                  Delete latest check
-                </button>
+                {isAdminView && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteCheck(latestCheck)}
+                    className="mt-3 text-xs text-gray-400 hover:text-red-600"
+                  >
+                    Delete latest check
+                  </button>
+                )}
               </div>
             ) : (
               <p className="px-6 py-4 text-sm text-gray-500">
@@ -381,21 +461,26 @@ export default function AdminTruckDetail({
         {tab === "repairs" && (
           <HistoryTable
             empty="No repairs or maintenance logged yet."
-            headers={["Date", "Type", "Details", "Shop", "Cost", ""]}
+            headers={["Date", "Type", "Details", "Shop", "Cost", "Logged by", ...(isAdminView ? [""] : [])]}
             rows={repairs.map((repair) => [
               fmt(repair.date),
-              maintenanceTypeLabel(repair.maintenanceType),
+              maintenanceTypeLabel(config.types, repair.maintenanceType),
               <span key="d" className="text-gray-600">{repair.description || "—"}</span>,
               repair.shop || "—",
               repair.cost > 0 ? formatCurrency(repair.cost) : "—",
-              <span key="a" className="flex justify-end gap-3 text-xs">
-                <button type="button" onClick={() => openRepair(repair)} className="font-medium text-blue-700 hover:underline">
-                  Edit
-                </button>
-                <button type="button" onClick={() => handleDeleteRepair(repair)} className="text-gray-400 hover:text-red-600">
-                  Delete
-                </button>
-              </span>,
+              <span key="b" className="text-gray-600">{repair.createdByName}</span>,
+              ...(isAdminView
+                ? [
+                    <span key="a" className="flex justify-end gap-3 text-xs">
+                      <button type="button" onClick={() => openRepair(repair)} className="font-medium text-blue-700 hover:underline">
+                        Edit
+                      </button>
+                      <button type="button" onClick={() => handleDeleteRepair(repair)} className="text-gray-400 hover:text-red-600">
+                        Delete
+                      </button>
+                    </span>,
+                  ]
+                : []),
             ])}
             numeric={[4]}
           />
@@ -403,14 +488,24 @@ export default function AdminTruckDetail({
 
         {tab === "fuel" && (
           <HistoryTable
-            empty="No fuel expenses tagged to this truck. Log them in Bookkeeping → Expenses with category Fuel."
-            headers={["Date", "Station", "Invoice", "Notes", "Amount"]}
+            empty="No fuel logged for this truck yet. Use Log fuel above."
+            headers={["Date", "Station", "Invoice", "Notes", "Amount", "Logged by", ...(isAdminView ? [""] : [])]}
             rows={fuel.map((entry) => [
               fmt(entry.date),
               entry.address || "—",
               entry.invoiceNo || "—",
               <span key="n" className="text-gray-600">{entry.description || "—"}</span>,
               formatCurrency(entry.amount),
+              <span key="b" className="text-gray-600">{entry.createdByName}</span>,
+              ...(isAdminView
+                ? [
+                    <span key="a" className="flex justify-end text-xs">
+                      <button type="button" onClick={() => handleDeleteFuel(entry)} className="text-gray-400 hover:text-red-600">
+                        Delete
+                      </button>
+                    </span>,
+                  ]
+                : []),
             ])}
             numeric={[4]}
           />
@@ -488,10 +583,20 @@ function HistoryTable({
   );
 }
 
-function TruckProfileCard({ truck, lastMaintenance }: { truck: Truck; lastMaintenance: string | null }) {
+function TruckProfileCard({
+  truck,
+  lastMaintenance,
+  documents,
+  canManage,
+}: {
+  truck: Truck;
+  lastMaintenance: string | null;
+  documents: TruckDocumentUi[];
+  canManage: boolean;
+}) {
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
-  const [form, setForm] = useState({ purchaseYear: "", purchasePrice: "", isActive: true });
+  const [form, setForm] = useState({ purchaseYear: "", purchasePrice: "", isActive: true, soldYear: "" });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -500,6 +605,7 @@ function TruckProfileCard({ truck, lastMaintenance }: { truck: Truck; lastMainte
       purchaseYear: truck.purchaseYear != null ? String(truck.purchaseYear) : "",
       purchasePrice: truck.purchasePrice != null ? String(truck.purchasePrice) : "",
       isActive: truck.isActive,
+      soldYear: truck.soldYear != null ? String(truck.soldYear) : "",
     });
     setError(null);
     setIsEditing(true);
@@ -513,6 +619,7 @@ function TruckProfileCard({ truck, lastMaintenance }: { truck: Truck; lastMainte
       purchaseYear: form.purchaseYear.trim() ? Number(form.purchaseYear) : null,
       purchasePrice: form.purchasePrice.trim() ? Number(form.purchasePrice) : null,
       isActive: form.isActive,
+      soldYear: form.soldYear.trim() ? Number(form.soldYear) : null,
     });
     setIsSaving(false);
     if (!result.success) return setError(result.error);
@@ -531,7 +638,7 @@ function TruckProfileCard({ truck, lastMaintenance }: { truck: Truck; lastMainte
         {truck.make} {truck.yearModel} · {truck.truckType}
       </p>
 
-      {!isEditing && (
+      {canManage && !isEditing && (
         <button
           type="button"
           onClick={startEditing}
@@ -542,7 +649,7 @@ function TruckProfileCard({ truck, lastMaintenance }: { truck: Truck; lastMainte
       )}
 
       <div className="mt-5 border-t border-gray-100 pt-4">
-        {isEditing ? (
+        {canManage && isEditing ? (
           <form onSubmit={handleSave} className="flex flex-col gap-3">
             <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
               Year purchased
@@ -578,6 +685,22 @@ function TruckProfileCard({ truck, lastMaintenance }: { truck: Truck; lastMainte
                 <option value="inactive">Inactive (sold / retired)</option>
               </select>
             </label>
+            {!form.isActive && (
+              <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
+                Year sold
+                <input
+                  type="number"
+                  required
+                  autoFocus={truck.isActive}
+                  min={form.purchaseYear.trim() ? Number(form.purchaseYear) : 1950}
+                  max={new Date().getFullYear()}
+                  value={form.soldYear}
+                  onChange={(e) => setForm((f) => ({ ...f, soldYear: e.target.value }))}
+                  placeholder={String(new Date().getFullYear())}
+                  className={fieldClass}
+                />
+              </label>
+            )}
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex gap-2">
               <button
@@ -604,10 +727,17 @@ function TruckProfileCard({ truck, lastMaintenance }: { truck: Truck; lastMainte
                 {truck.isActive ? "Active" : "Inactive"}
               </span>
             </Info>
-            <Info label="Year purchased">{truck.purchaseYear ?? <Missing />}</Info>
-            <Info label="Purchase price">
-              {truck.purchasePrice != null ? formatCurrency(truck.purchasePrice) : <Missing />}
-            </Info>
+            {!truck.isActive && (
+              <Info label="Year sold">{truck.soldYear ?? <Missing />}</Info>
+            )}
+            {canManage && (
+              <>
+                <Info label="Year purchased">{truck.purchaseYear ?? <Missing />}</Info>
+                <Info label="Purchase price">
+                  {truck.purchasePrice != null ? formatCurrency(truck.purchasePrice) : <Missing />}
+                </Info>
+              </>
+            )}
             <Info label="Last maintenance">{lastMaintenance ? formatShortDate(lastMaintenance) : <Missing text="None logged" />}</Info>
             <Info label="Year model">{truck.yearModel}</Info>
             <Info label="MV file no.">{truck.mvFileNo}</Info>
@@ -618,7 +748,9 @@ function TruckProfileCard({ truck, lastMaintenance }: { truck: Truck; lastMainte
         )}
       </div>
 
-      <CertificateField truck={truck} />
+      {/* Files are admin-only: non-admins don't see the certificate at all. */}
+      {canManage && <CertificateField truck={truck} />}
+      {canManage && <DocumentsField truck={truck} documents={documents} />}
     </section>
   );
 }
@@ -748,6 +880,115 @@ function CertificateField({ truck }: { truck: Truck }) {
           {busy === "upload" ? "Uploading…" : "Upload certificate (PDF or photo)"}
         </button>
       )}
+      {error && <p role="alert" className="mt-2 text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+const renewalStyles = {
+  overdue: "text-red-700",
+  "due-soon": "text-amber-700",
+  ok: "text-gray-600",
+} as const;
+
+function DocumentsField({ truck, documents }: { truck: Truck; documents: TruckDocumentUi[] }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const byType = new Map(documents.map((doc) => [doc.docType, doc]));
+
+  const handleOpen = async (docType: string) => {
+    setError(null);
+    // Open the tab synchronously so popup blockers allow it, then point it at the signed URL.
+    const tab = window.open("", "_blank");
+    setBusy(docType);
+    const result = await getTruckDocumentUrl(truck.id, docType);
+    setBusy(null);
+    if (!result.success) {
+      tab?.close();
+      return setError(result.error);
+    }
+    if (tab) tab.location.href = result.url;
+    else window.location.href = result.url;
+  };
+
+  const handleRemove = async (docType: string, label: string) => {
+    if (!window.confirm(`Remove the ${label} record and its file?`)) return;
+    setError(null);
+    setBusy(docType);
+    const result = await removeTruckDocument(truck.id, docType);
+    setBusy(null);
+    if (!result.success) return setError(result.error);
+    router.refresh();
+  };
+
+  return (
+    <div className="mt-5 border-t border-gray-100 pt-4">
+      <h2 className="text-xs font-medium uppercase tracking-wider text-gray-500">Documents</h2>
+      <TruckDocumentModal
+        docType={editing}
+        truckId={truck.id}
+        plateNumber={truck.plateNumber}
+        document={editing ? byType.get(editing) ?? null : null}
+        onClose={() => setEditing(null)}
+        onSaved={() => {
+          setEditing(null);
+          router.refresh();
+        }}
+      />
+      <ul className="mt-2 space-y-2.5">
+        {TRUCK_DOCUMENT_TYPES.map(({ key, label }) => {
+          const doc = byType.get(key);
+          const renewal = doc ? renewalState(doc.renewalDueDate) : null;
+          return (
+            <li key={key} className="text-sm">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="font-medium text-gray-900">{label}</span>
+                <span className="flex shrink-0 gap-2 text-xs">
+                  {doc?.hasFile && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpen(key)}
+                      disabled={busy !== null}
+                      title={doc.fileName ?? undefined}
+                      className="font-medium text-blue-700 hover:underline disabled:opacity-50"
+                    >
+                      View
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setEditing(key)}
+                    disabled={busy !== null}
+                    className="font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50"
+                  >
+                    {doc ? "Edit" : "Add"}
+                  </button>
+                  {doc && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(key, label)}
+                      disabled={busy !== null}
+                      className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </span>
+              </div>
+              {doc && renewal ? (
+                <p className={`text-xs ${renewalStyles[renewal.state]}`}>
+                  Renewal {renewal.state === "overdue" ? "overdue since" : "due"} {formatShortDate(doc.renewalDueDate)}
+                  {!doc.hasFile && <span className="text-gray-400"> · no file</span>}
+                </p>
+              ) : (
+                <p className="text-xs text-gray-400">Not on record</p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
       {error && <p role="alert" className="mt-2 text-xs text-red-600">{error}</p>}
     </div>
   );

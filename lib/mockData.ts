@@ -3,7 +3,7 @@
 import { destinationRates } from "./rates";
 export { trucks, getTruckById, getTruckByPlateNumber, formatTruckLabel, type Truck } from "./trucks";
 
-export type EmployeeRole = "Driver" | "Helper";
+export type EmployeeRole = "Driver" | "Helper" | "Secretary";
 export type TenureStatus = "new" | "6 months" | "inactive";
 export type PayoutStatus = "Pending" | "Paid" | "Partial";
 
@@ -47,6 +47,8 @@ export interface Shipment {
   payoutStatus: PayoutStatus;
   flagged: boolean;
   approved: boolean;
+  /** Secretary pre-approval (yellow). Doesn't count toward payouts until `approved`. */
+  secretaryApproved?: boolean;
   /** When the log was saved. Used to put the newest entries first. */
   createdAt?: string;
   uploadedByUserId: string;

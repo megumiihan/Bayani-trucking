@@ -6,7 +6,8 @@ import { useEscapeToClose } from "@/components/ui/useEscapeToClose";
 
 interface RecordPayoutModalProps {
   employeeName: string;
-  balanceDue: number;
+  /** Null hides the balance (secretaries don't see totals). */
+  balanceDue: number | null;
   isOpen: boolean;
   isSaving: boolean;
   error: string | null;
@@ -33,7 +34,7 @@ export default function RecordPayoutModal({
 
   useEffect(() => {
     if (isOpen) {
-      setAmount(balanceDue > 0 ? String(balanceDue) : "");
+      setAmount(balanceDue != null && balanceDue > 0 ? String(balanceDue) : "");
       setPaidAt(todayISO());
       setNote("");
     }
@@ -75,14 +76,16 @@ export default function RecordPayoutModal({
           earnings — it adds a payment row to the ledger.
         </p>
 
-        <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 text-sm">
-          <p className="text-xs font-medium uppercase tracking-wider text-gray-500">
-            Balance due
-          </p>
-          <p className="mt-1 text-xl font-bold text-gray-900">
-            {formatCurrency(balanceDue)}
-          </p>
-        </div>
+        {balanceDue != null && (
+          <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 text-sm">
+            <p className="text-xs font-medium uppercase tracking-wider text-gray-500">
+              Balance due
+            </p>
+            <p className="mt-1 text-xl font-bold text-gray-900">
+              {formatCurrency(balanceDue)}
+            </p>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           <label className="block">

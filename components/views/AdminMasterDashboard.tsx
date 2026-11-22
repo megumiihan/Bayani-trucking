@@ -27,6 +27,7 @@ import {
 import { exportShipmentsToExcel } from "@/lib/exportShipments";
 import {
   approveShipments,
+  setShipmentSecretaryApproval,
   deleteShipment,
   setShipmentApproval,
   toggleShipmentFlag,
@@ -72,7 +73,9 @@ export default function AdminMasterDashboard({
   lookupClients,
   routes,
 }: AdminMasterDashboardProps) {
-  const { role } = useRole();
+  const { role, isStaffView } = useRole();
+  // Secretaries edit, flag and pre-approve, but don't approve, delete or see totals.
+  const isAdminView = role === "admin";
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -137,10 +140,24 @@ export default function AdminMasterDashboard({
     if (result.success) {
       setShipments((current) =>
         current.map((shipment) =>
-          shipment.id === id ? result.shipment : shipment
+          shipment.id === id ? withLogger(result.shipment, shipment) : shipment
         )
       );
     }
+  };
+
+  const handleTogglePreApproval = (id: string) => {
+    const shipment = shipments.find((entry) => entry.id === id);
+    if (!shipment || shipment.approved) return;
+    const next = !shipment.secretaryApproved;
+    const setFlag = (value: boolean) =>
+      setShipments((current) =>
+        current.map((entry) => (entry.id === id ? { ...entry, secretaryApproved: value } : entry))
+      );
+    setFlag(next);
+    void setShipmentSecretaryApproval([id], next).then((result) => {
+      if (!result.success) setFlag(!next);
+    });
   };
 
   const handleToggleApproval = (id: string) => {
@@ -173,7 +190,7 @@ export default function AdminMasterDashboard({
 
       setShipments((current) =>
         current.map((entry) =>
-          entry.id === id ? result.shipment : entry
+          entry.id === id ? withLogger(result.shipment, entry) : entry
         )
       );
     });
@@ -214,7 +231,7 @@ export default function AdminMasterDashboard({
     if (result.success) {
       setShipments((current) =>
         current.map((shipment) =>
-          shipment.id === id ? result.shipment : shipment
+          shipment.id === id ? withLogger(result.shipment, shipment) : shipment
         )
       );
       return { success: true as const };
@@ -250,7 +267,7 @@ export default function AdminMasterDashboard({
     }
   };
 
-  if (role !== "admin") {
+  if (!isStaffView) {
     return (
       <div className="card-surface rounded-2xl border-amber-200 bg-amber-50 p-8 text-center">
         <p className="font-semibold text-amber-900">Admin access required</p>
@@ -270,7 +287,9 @@ export default function AdminMasterDashboard({
         description="Track fleet shipments, crew payouts, and flagged deliveries in one place."
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div
+        className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${isAdminView ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}
+      >
         <StatCard
           label="Shipments"
           value={String(filteredShipments.length)}
@@ -286,6 +305,7 @@ export default function AdminMasterDashboard({
             </svg>
           }
         />
+        {isAdminView && (
         <StatCard
           label="Total Payouts"
           value={formatCurrency(totalPayouts)}
@@ -297,6 +317,7 @@ export default function AdminMasterDashboard({
             </svg>
           }
         />
+        )}
         <StatCard
           label="Flagged"
           value={String(flaggedCount)}
@@ -339,7 +360,7 @@ export default function AdminMasterDashboard({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {pendingApprovalCount > 0 && (
+            {isAdminView && pendingApprovalCount > 0 && (
               <button
                 type="button"
                 onClick={handleApproveAll}
@@ -351,6 +372,7 @@ export default function AdminMasterDashboard({
                 Approve all ({pendingApprovalCount})
               </button>
             )}
+            {isAdminView && (
             <button
               type="button"
               onClick={handleExport}
@@ -371,6 +393,7 @@ export default function AdminMasterDashboard({
                 </>
               )}
             </button>
+            )}
           </div>
         </div>
 
@@ -445,7 +468,12 @@ export default function AdminMasterDashboard({
                     shipment={shipment}
                     isFlagging={flaggingId === shipment.id}
                     onToggleFlag={() => handleToggleFlag(shipment.id)}
-                    onToggleApprove={() => handleToggleApproval(shipment.id)}
+                    onToggleApprove={() =>
+                      isAdminView
+                        ? handleToggleApproval(shipment.id)
+                        : handleTogglePreApproval(shipment.id)
+                    }
+                    mode={isAdminView ? "admin" : "secretary"}
                     onEdit={() => setEditingShipment(shipment)}
                     onDelete={() => {
                       setDeleteError(null);
@@ -467,6 +495,7 @@ export default function AdminMasterDashboard({
         routes={routes}
         onClose={() => setEditingShipment(null)}
         onSave={handleUpdateShipment}
+        mode={isAdminView ? "admin" : "secretary"}
       />
 
       <DeleteShipmentModal
@@ -489,11 +518,13 @@ function MasterTableRow({
   isFlagging,
   onToggleFlag,
   onToggleApprove,
+  mode,
   onEdit,
   onDelete,
 }: {
   shipment: Shipment;
   isFlagging: boolean;
+  mode: "admin" | "secretary";
   onToggleFlag: () => void;
   onToggleApprove: () => void;
   onEdit: () => void;
@@ -527,6 +558,7 @@ function MasterTableRow({
           onEdit={onEdit}
           onToggleApprove={onToggleApprove}
           onToggleFlag={onToggleFlag}
+          mode={mode}
           onDelete={onDelete}
         />
       </td>
@@ -539,9 +571,15 @@ function MasterTableRow({
       <td className="whitespace-nowrap px-4 py-3.5">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="font-medium text-slate-900">{shipment.client}</span>
-          {!shipment.approved && (
-            <Badge label="Pending" className="bg-slate-100 text-slate-700" />
-          )}
+          {!shipment.approved &&
+            (shipment.secretaryApproved ? (
+              <Badge
+                label="Pre-approved"
+                className="border border-yellow-300 bg-yellow-100 text-yellow-800"
+              />
+            ) : (
+              <Badge label="Pending" className="bg-slate-100 text-slate-700" />
+            ))}
           {shipment.flagged && (
             <Badge label="Flagged" className="bg-amber-100 text-amber-800" />
           )}
@@ -602,4 +640,9 @@ function MasterTableRow({
       </td>
     </tr>
   );
+}
+
+/** Server results don't carry the logger's name; keep the one already loaded. */
+function withLogger(next: Shipment, previous: Shipment): Shipment {
+  return { ...next, uploadedByName: next.uploadedByName ?? previous.uploadedByName };
 }

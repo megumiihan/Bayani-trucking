@@ -34,3 +34,21 @@ export async function getCollectionReceipts() {
 
   return records.map(mapCollectionReceiptToUi);
 }
+
+export async function getBillablesForClient(clientId: string) {
+  const records = await prisma.billable.findMany({
+    where: { clientId },
+    include: billableInclude,
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+  });
+  return records.map(mapBillableToUi);
+}
+
+export async function getCollectionReceiptsForClient(clientId: string) {
+  const records = await prisma.collectionReceipt.findMany({
+    where: { clientId },
+    include: collectionReceiptInclude,
+    orderBy: [{ datePaid: "desc" }, { createdAt: "desc" }],
+  });
+  return records.map(mapCollectionReceiptToUi);
+}

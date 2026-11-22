@@ -1,8 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/auth";
-import { mapSalaryPaymentToUi, type SalaryPaymentUi } from "@/lib/mappers/salaryPayment";
+import { requireStaff } from "@/lib/auth";
+import {
+  mapSalaryPaymentToUi,
+  paymentInclude,
+  type SalaryPaymentUi,
+} from "@/lib/mappers/salaryPayment";
 import { prisma } from "@/lib/prisma";
 
 export type RecordSalaryPaymentResult =
@@ -16,7 +20,7 @@ export async function recordSalaryPayment(
   note?: string
 ): Promise<RecordSalaryPaymentResult> {
   try {
-    const user = await requireAdmin();
+    const user = await requireStaff();
 
     if (!Number.isFinite(amount) || amount <= 0) {
       return { success: false, error: "Enter an amount greater than zero." };
@@ -43,6 +47,7 @@ export async function recordSalaryPayment(
         note: note?.trim() || null,
         createdById: user.id,
       },
+      include: paymentInclude,
     });
 
     revalidatePath(`/admin/employees/${employeeId}`);

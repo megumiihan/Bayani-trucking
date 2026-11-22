@@ -39,8 +39,14 @@ export function computeBillableBreakdown(
     ? roundMoney(taxableAmt * WITHHOLDING_TAX_RATE)
     : 0;
   const totalTax = roundMoney(outputTax + withholdingTax);
+  const totalAmountDue = billableAmountDue(totalInvoiceAmt, withholdingTax);
 
-  return { taxableAmt, outputTax, withholdingTax, totalTax };
+  return { taxableAmt, outputTax, withholdingTax, totalTax, totalAmountDue };
+}
+
+/** What the client actually pays: total invoice amount less the tax they withhold. */
+export function billableAmountDue(totalInvoiceAmt: number, withholdingTax: number) {
+  return roundMoney(totalInvoiceAmt - withholdingTax);
 }
 
 export type BillableUi = {
@@ -61,11 +67,21 @@ export type BillableUi = {
   createdByName: string;
 };
 
+/** Typed in when "Others" is picked: creates (or reuses) a temporary client. */
+export type NewTemporaryClientInput = {
+  name: string;
+  address?: string;
+  tin?: string;
+};
+
 export type BillableWriteInput = {
   date: string;
   invoiceNo: string;
   vatRegNo: string;
+  /** Empty when newClient is given. */
   clientId: string;
+  /** Billables take the address and TIN from buyerAddress / vatRegNo. */
+  newClient?: NewTemporaryClientInput;
   buyerAddress: string;
   totalInvoiceAmt: number;
   vatDeduction: boolean;
@@ -78,6 +94,8 @@ export type DisbursementUi = {
   payee: string;
   amount: number;
   referenceNo: string;
+  invoiceNo: string;
+  vatRegNo: string;
   description: string;
   createdByName: string;
 };
@@ -87,6 +105,8 @@ export type DisbursementWriteInput = {
   payee: string;
   amount: number;
   referenceNo?: string;
+  invoiceNo?: string;
+  vatRegNo?: string;
   description?: string;
 };
 
@@ -101,14 +121,34 @@ export type CollectionReceiptUi = {
   clientId: string;
   clientName: string;
   createdByName: string;
+  /** SIs paid by this receipt. Empty for receipts logged before SIs were linked. */
+  items: CollectionReceiptItemUi[];
 };
 
+export type CollectionReceiptItemUi = {
+  id: string;
+  billableId: string | null;
+  invoiceNo: string;
+  buyerName: string;
+  buyerAddress: string;
+  vatRegNo: string;
+  amountDue: number;
+};
+
+/**
+ * Collection amount is normally the sum of the selected SIs' amounts due. Only
+ * temporary ("Others") clients may log a receipt with no SIs, using
+ * collectionAmount instead.
+ */
 export type CollectionReceiptWriteInput = {
   datePaid: string;
   orNumber: string;
-  collectionAmount: number;
   paymentDetails: string;
   whoPaid: string;
   whoReceived: string;
+  /** Empty when newClient is given. */
   clientId: string;
+  newClient?: NewTemporaryClientInput;
+  billableIds: string[];
+  collectionAmount?: number;
 };

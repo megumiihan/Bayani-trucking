@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { requirePageRole } from "@/lib/auth";
 import { getEmployeeById, getEmployeeLoginEmail } from "@/lib/queries/employees";
 import { getGovernmentIds } from "@/lib/queries/governmentIds";
 import { getSalaryPaymentsForEmployee } from "@/lib/queries/payments";
@@ -14,13 +15,15 @@ interface EmployeeDetailPageProps {
 export default async function EmployeeDetailPage({
   params,
 }: EmployeeDetailPageProps) {
+  const viewer = await requirePageRole(["admin", "secretary"]);
+  const isAdmin = viewer.role === "admin";
   const { id } = await params;
 
   const [employee, shipments, payments, loginEmail, governmentIds] = await Promise.all([
     getEmployeeById(id),
     getShipments(),
     getSalaryPaymentsForEmployee(id),
-    getEmployeeLoginEmail(id),
+    isAdmin ? getEmployeeLoginEmail(id) : Promise.resolve(null),
     getGovernmentIds(id),
   ]);
 

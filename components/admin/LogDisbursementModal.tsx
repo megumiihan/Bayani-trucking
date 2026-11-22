@@ -4,11 +4,14 @@ import { useEffect, useState, type FormEvent } from "react";
 import type { DisbursementWriteInput } from "@/lib/bookkeeping";
 import { inputClass } from "@/components/ui/formStyles";
 import { useEscapeToClose } from "@/components/ui/useEscapeToClose";
+import SupplierPicker from "@/components/admin/SupplierPicker";
+import type { Supplier } from "@/lib/suppliers";
 
 interface LogDisbursementModalProps {
   isOpen: boolean;
   isSaving: boolean;
   error: string | null;
+  suppliers: Supplier[];
   onClose: () => void;
   onSave: (input: DisbursementWriteInput) => Promise<void>;
 }
@@ -21,6 +24,7 @@ export default function LogDisbursementModal({
   isOpen,
   isSaving,
   error,
+  suppliers,
   onClose,
   onSave,
 }: LogDisbursementModalProps) {
@@ -28,6 +32,8 @@ export default function LogDisbursementModal({
   const [payee, setPayee] = useState("");
   const [amount, setAmount] = useState("");
   const [referenceNo, setReferenceNo] = useState("");
+  const [invoiceNo, setInvoiceNo] = useState("");
+  const [vatRegNo, setVatRegNo] = useState("");
   const [description, setDescription] = useState("");
 
   useEffect(() => {
@@ -36,6 +42,8 @@ export default function LogDisbursementModal({
     setPayee("");
     setAmount("");
     setReferenceNo("");
+    setInvoiceNo("");
+    setVatRegNo("");
     setDescription("");
   }, [isOpen]);
 
@@ -53,6 +61,8 @@ export default function LogDisbursementModal({
       payee,
       amount: parsedAmount,
       referenceNo,
+      invoiceNo,
+      vatRegNo,
       description,
     });
   };
@@ -77,7 +87,8 @@ export default function LogDisbursementModal({
           Log disbursement
         </h2>
         <p className="mt-1 text-sm text-gray-500">
-          Record money paid out. Reference number and description are optional.
+          Record money paid out. Invoice no., VAT Reg. No., reference number and
+          description are optional.
         </p>
         <p
           role="status"
@@ -99,6 +110,14 @@ export default function LogDisbursementModal({
               className={inputClass}
             />
           </label>
+
+          <SupplierPicker
+            suppliers={suppliers}
+            onPick={(supplier) => {
+              setPayee(supplier.name);
+              setVatRegNo(supplier.tin);
+            }}
+          />
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-gray-700">
@@ -125,6 +144,32 @@ export default function LogDisbursementModal({
               required
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">
+              Invoice no.
+              <span className="ml-1 font-normal text-gray-400">(optional)</span>
+            </span>
+            <input
+              type="text"
+              value={invoiceNo}
+              onChange={(e) => setInvoiceNo(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">
+              VAT Reg. No.
+              <span className="ml-1 font-normal text-gray-400">(optional)</span>
+            </span>
+            <input
+              type="text"
+              value={vatRegNo}
+              onChange={(e) => setVatRegNo(e.target.value)}
               className={inputClass}
             />
           </label>

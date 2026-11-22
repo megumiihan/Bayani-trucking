@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { MAINTENANCE_TYPES, isReefer, todayISO } from "@/lib/truckMaintenance";
+import { REPAIR_TYPE_KEY, maintenanceTypesFor, todayISO, type MaintenanceType } from "@/lib/truckMaintenance";
 import type { RepairWriteInput, TruckRepairUi } from "@/lib/truckRecords";
 import { inputClass } from "@/components/ui/formStyles";
 import { useEscapeToClose } from "@/components/ui/useEscapeToClose";
@@ -12,6 +12,8 @@ interface TruckRepairModalProps {
   error: string | null;
   plateNumber: string;
   truckType: string;
+  /** All maintenance types, archived included. */
+  types: MaintenanceType[];
   repair?: TruckRepairUi | null;
   onClose: () => void;
   onSave: (input: RepairWriteInput) => Promise<void>;
@@ -23,12 +25,13 @@ export default function TruckRepairModal({
   error,
   plateNumber,
   truckType,
+  types: allTypes,
   repair,
   onClose,
   onSave,
 }: TruckRepairModalProps) {
   const [date, setDate] = useState(todayISO);
-  const [maintenanceType, setMaintenanceType] = useState("REPAIR");
+  const [maintenanceType, setMaintenanceType] = useState(REPAIR_TYPE_KEY);
   const [description, setDescription] = useState("");
   const [shop, setShop] = useState("");
   const [cost, setCost] = useState("");
@@ -36,7 +39,7 @@ export default function TruckRepairModal({
   useEffect(() => {
     if (!isOpen) return;
     setDate(repair?.date ?? todayISO());
-    setMaintenanceType(repair?.maintenanceType ?? "REPAIR");
+    setMaintenanceType(repair?.maintenanceType ?? REPAIR_TYPE_KEY);
     setDescription(repair?.description ?? "");
     setShop(repair?.shop ?? "");
     setCost(repair && repair.cost > 0 ? String(repair.cost) : "");
@@ -45,8 +48,10 @@ export default function TruckRepairModal({
   useEscapeToClose(isOpen, onClose, isSaving);
   if (!isOpen) return null;
 
-  const reefer = isReefer(truckType);
-  const types = MAINTENANCE_TYPES.filter((type) => !type.reeferOnly || reefer);
+  // Keep a removed type selectable when editing a repair that was logged under it.
+  const types = maintenanceTypesFor(allTypes, truckType);
+  const current = repair && allTypes.find((type) => type.key === repair.maintenanceType);
+  if (current && !types.includes(current)) types.push(current);
   const parsedCost = cost.trim() === "" ? 0 : Number(cost);
   const costValid = Number.isFinite(parsedCost) && parsedCost >= 0;
 

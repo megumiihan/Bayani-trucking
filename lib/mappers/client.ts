@@ -6,6 +6,10 @@ export function mapClientToUi(record: DbClient): Client {
   return {
     id: record.id,
     name: record.name,
+    legalName: record.legalName,
+    address: record.address,
+    tin: record.tin,
+    isTemporary: record.isTemporary,
     calculationType: fromPrismaCalculationType(record.calcType),
     pigheadDriverRate: record.pigheadDriverRate,
     pigheadHelperRate: record.pigheadHelperRate,

@@ -1,13 +1,17 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
-import { updateDestinationRates } from "@/lib/actions/route";
+import {
+  createDestinationRoute,
+  updateDestinationRates,
+} from "@/lib/actions/route";
 import type { Client } from "@/lib/clients";
 import { formatCurrency } from "@/lib/mockData";
 import type { DestinationRouteRate } from "@/lib/rates";
 import { inputClass } from "@/components/ui/formStyles";
 import EditDestinationRateModal from "@/components/admin/EditDestinationRateModal";
 import DestinationRateHistoryModal from "@/components/admin/DestinationRateHistoryModal";
+import AddRateClientForm from "@/components/admin/AddRateClientForm";
 
 interface DestinationRatesPanelProps {
   clients: Client[];
@@ -15,9 +19,10 @@ interface DestinationRatesPanelProps {
 }
 
 export default function DestinationRatesPanel({
-  clients,
+  clients: initialClients,
   initialRates,
 }: DestinationRatesPanelProps) {
+  const [clients, setClients] = useState(initialClients);
   const [rates, setRates] = useState(initialRates);
   const [selectedClientId, setSelectedClientId] = useState(clients[0]?.id ?? "");
   const [selectedRouteIds, setSelectedRouteIds] = useState<Set<string>>(
@@ -179,10 +184,6 @@ export default function DestinationRatesPanel({
     setBulkSuccess("Route rates saved.");
   };
 
-  if (clients.length === 0) {
-    return null;
-  }
-
   return (
     <>
       <div className="card-surface overflow-hidden rounded-2xl">
@@ -206,6 +207,7 @@ export default function DestinationRatesPanel({
           </button>
         </div>
 
+        {clients.length > 0 && (
         <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
           <label className="block max-w-xs">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -224,6 +226,7 @@ export default function DestinationRatesPanel({
             </select>
           </label>
         </div>
+        )}
 
         {selectedRouteIds.size > 0 && (
           <form
@@ -308,7 +311,9 @@ export default function DestinationRatesPanel({
                     colSpan={7}
                     className="px-6 py-12 text-center text-slate-500"
                   >
-                    No destination routes for this client.
+                    {clients.length === 0
+                      ? "No destination-based clients yet. Add one below."
+                      : "No destination routes for this client. Add one below."}
                   </td>
                 </tr>
               ) : (
@@ -364,6 +369,27 @@ export default function DestinationRatesPanel({
             </tbody>
           </table>
         </div>
+
+        {selectedClient && (
+          <AddDestinationRouteForm
+            clientId={selectedClient.id}
+            clientName={selectedClient.name}
+            onCreated={(route) => {
+              setRates((current) => [...current, route]);
+              setBulkSuccess(`Added ${route.description ?? route.routeName}.`);
+            }}
+          />
+        )}
+
+        <AddRateClientForm
+          calcType="DESTINATION"
+          onCreated={(client) => {
+            setClients((current) =>
+              [...current, client].sort((a, b) => a.name.localeCompare(b.name))
+            );
+            handleClientChange(client.id);
+          }}
+        />
       </div>
 
       <EditDestinationRateModal
@@ -408,6 +434,131 @@ function BulkRateInput({
         min="0"
         step="0.01"
         placeholder="Keep current"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={inputClass}
+      />
+    </label>
+  );
+}
+
+function AddDestinationRouteForm({
+  clientId,
+  clientName,
+  onCreated,
+}: {
+  clientId: string;
+  clientName: string;
+  onCreated: (route: DestinationRouteRate) => void;
+}) {
+  const [routeName, setRouteName] = useState("");
+  const [distance, setDistance] = useState("");
+  const [driver, setDriver] = useState("");
+  const [helper, setHelper] = useState("");
+  const [extraHelper, setExtraHelper] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setIsSaving(true);
+    setError(null);
+    const result = await createDestinationRoute({
+      clientId,
+      routeName,
+      distance,
+      driverBaseRate: Number(driver),
+      helperBaseRate: Number(helper),
+      extraHelperBaseRate: Number(extraHelper),
+    });
+    setIsSaving(false);
+    if (!result.success) {
+      setError(result.error);
+      return;
+    }
+    setRouteName("");
+    setDistance("");
+    setDriver("");
+    setHelper("");
+    setExtraHelper("");
+    onCreated(result.route);
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="grid grid-cols-2 gap-3 border-t border-slate-100 px-5 py-4 sm:grid-cols-6 sm:px-6"
+    >
+      <p className="col-span-2 text-xs font-semibold uppercase tracking-wider text-slate-500 sm:col-span-6">
+        Add route · {clientName}
+      </p>
+      <label className="col-span-2 block">
+        <span className="mb-1.5 block text-xs font-medium text-slate-500">
+          Route / destination
+        </span>
+        <input
+          type="text"
+          required
+          value={routeName}
+          onChange={(e) => setRouteName(e.target.value)}
+          placeholder="e.g. ILAGAN CITY, ISABELA"
+          className={inputClass}
+        />
+      </label>
+      <label className="block">
+        <span className="mb-1.5 block text-xs font-medium text-slate-500">
+          Distance (optional)
+        </span>
+        <input
+          type="text"
+          value={distance}
+          onChange={(e) => setDistance(e.target.value)}
+          placeholder="e.g. 1-120KM"
+          className={inputClass}
+        />
+      </label>
+      <AddRateInput label="Driver" value={driver} onChange={setDriver} />
+      <AddRateInput label="Helper" value={helper} onChange={setHelper} />
+      <AddRateInput label="Extra helper" value={extraHelper} onChange={setExtraHelper} />
+      <div className="col-span-2 flex justify-end sm:col-span-6">
+        <button
+          type="submit"
+          disabled={isSaving}
+          className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
+          {isSaving ? "Adding…" : "Add route"}
+        </button>
+      </div>
+      {error && (
+        <p
+          role="alert"
+          className="col-span-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 sm:col-span-6"
+        >
+          {error}
+        </p>
+      )}
+    </form>
+  );
+}
+
+export function AddRateInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-medium text-slate-500">{label}</span>
+      <input
+        type="number"
+        inputMode="decimal"
+        min="0"
+        step="0.01"
+        required
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={inputClass}

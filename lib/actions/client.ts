@@ -7,6 +7,7 @@ import { mapClientToUi } from "@/lib/mappers/client";
 import { mapClientRateHistoryToUi } from "@/lib/mappers/clientRateHistory";
 import { prisma } from "@/lib/prisma";
 import type { Client } from "@/lib/clients";
+import { formatTin } from "@/lib/clientDirectory";
 
 export type ClientActionResult =
   | { success: true; client: Client }
@@ -156,7 +157,7 @@ export async function createLivestockRoute(input: {
   helperBaseRate: number;
 }): Promise<LivestockRouteResult> {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
 
     const routeName = input.routeName.trim();
     if (!routeName) return { success: false, error: "Route name is required." };
@@ -175,15 +176,34 @@ export async function createLivestockRoute(input: {
       return { success: false, error: "Routes can only be added to livestock clients here." };
     }
 
-    await prisma.destinationRoute.create({
-      data: {
-        clientId: client.id,
-        routeName,
-        distance: "",
-        driverBaseRate: input.driverBaseRate,
-        helperBaseRate: input.helperBaseRate,
-        extraHelperBaseRate: input.helperBaseRate,
-      },
+    await prisma.$transaction(async (tx) => {
+      const created = await tx.destinationRoute.create({
+        data: {
+          clientId: client.id,
+          routeName,
+          distance: "",
+          driverBaseRate: input.driverBaseRate,
+          helperBaseRate: input.helperBaseRate,
+          extraHelperBaseRate: input.helperBaseRate,
+        },
+      });
+
+      await tx.destinationRateHistory.create({
+        data: {
+          clientId: client.id,
+          destinationRouteId: created.id,
+          routeName,
+          distance: "",
+          isCreated: true,
+          prevDriverBaseRate: 0,
+          prevHelperBaseRate: 0,
+          prevExtraHelperBaseRate: 0,
+          newDriverBaseRate: input.driverBaseRate,
+          newHelperBaseRate: input.helperBaseRate,
+          newExtraHelperBaseRate: input.helperBaseRate,
+          changedById: admin.id,
+        },
+      });
     });
 
     revalidatePath("/admin/routes");
@@ -375,6 +395,91 @@ export async function fetchClientRateHistory(
         error instanceof Error
           ? error.message
           : "Could not load rate history.",
+    };
+  }
+}
+
+// ── Client directory (Clients tab) ──────────────────────────────────────────
+
+export interface ClientDetailsInput {
+  name: string;
+  legalName: string;
+  address: string;
+  tin: string;
+  /** One-off client: hidden from the Clients page. Omit to leave unchanged. */
+  isTemporary?: boolean;
+}
+
+function cleanDetails(input: ClientDetailsInput) {
+  const name = input.name.trim();
+  if (!name) throw new Error("Short name is required.");
+  return {
+    name,
+    legalName: input.legalName.trim(),
+    address: input.address.trim(),
+    tin: formatTin(input.tin),
+    ...(input.isTemporary === undefined ? {} : { isTemporary: input.isTemporary }),
+  };
+}
+
+function revalidateClientPages() {
+  revalidatePath("/admin/clients");
+  revalidatePath("/admin/bookkeeping/directory");
+  revalidatePath("/admin/routes");
+  revalidatePath("/admin/bookkeeping");
+  revalidatePath("/employee/shipments/new");
+  revalidatePath("/");
+}
+
+/** New clients start on destination pricing; set rates on Routes & Rates. */
+export async function createClientRecord(
+  input: ClientDetailsInput,
+): Promise<ClientActionResult> {
+  try {
+    await requireAdmin();
+    const data = cleanDetails(input);
+    const existing = await prisma.client.findUnique({
+      where: { name: data.name },
+      select: { id: true },
+    });
+    if (existing) {
+      return { success: false, error: `A client named "${data.name}" already exists.` };
+    }
+    const record = await prisma.client.create({
+      data: { ...data, calcType: "DESTINATION" },
+    });
+    revalidateClientPages();
+    return { success: true, client: mapClientToUi(record) };
+  } catch (error) {
+    console.error("[createClientRecord]", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Could not add the client.",
+    };
+  }
+}
+
+export async function updateClientDetails(
+  input: ClientDetailsInput & { id: string },
+): Promise<ClientActionResult> {
+  try {
+    await requireAdmin();
+    const data = cleanDetails(input);
+    const clash = await prisma.client.findUnique({
+      where: { name: data.name },
+      select: { id: true },
+    });
+    if (clash && clash.id !== input.id) {
+      return { success: false, error: `A client named "${data.name}" already exists.` };
+    }
+    const record = await prisma.client.update({ where: { id: input.id }, data });
+    revalidateClientPages();
+    return { success: true, client: mapClientToUi(record) };
+  } catch (error) {
+    console.error("[updateClientDetails]", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Could not save the client.",
     };
   }
 }

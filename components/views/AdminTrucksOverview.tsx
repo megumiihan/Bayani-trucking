@@ -1,16 +1,28 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useRole } from "@/context/RoleContext";
 import { formatCurrency } from "@/lib/mockData";
-import { formatShortDate, getTruckAlerts, type TruckAlert } from "@/lib/truckMaintenance";
+import {
+  formatShortDate,
+  getTruckAlerts,
+  type MaintenanceConfig,
+  type TruckAlert,
+} from "@/lib/truckMaintenance";
 import type { TruckOverviewRow } from "@/lib/truckRecords";
 import EmptyState from "@/components/ui/EmptyState";
 import PageHeader from "@/components/ui/PageHeader";
+import NewTruckModal from "@/components/admin/NewTruckModal";
+import MaintenanceSettings from "@/components/admin/MaintenanceSettings";
 
 interface AdminTrucksOverviewProps {
   rows: TruckOverviewRow[];
+  /** Maintenance types and monthly check items, applied to every truck. */
+  config: MaintenanceConfig;
+  /** Signed-in user is an admin: sees the fleet list and can add trucks. */
+  canManage: boolean;
 }
 
 type TruckHealth = "required" | "check" | "ok" | "inactive";
@@ -27,15 +39,25 @@ const healthStyles: Record<TruckHealth, { label: string; dot: string; text: stri
   inactive: { label: "Inactive", dot: "bg-gray-300", text: "text-gray-500" },
 };
 
-export default function AdminTrucksOverview({ rows }: AdminTrucksOverviewProps) {
+export default function AdminTrucksOverview({ rows, config, canManage }: AdminTrucksOverviewProps) {
   const { role } = useRole();
+  const router = useRouter();
   const [query, setQuery] = useState("");
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  // Admins previewing another view see what that role sees.
+  const isAdminView = canManage && role === "admin";
 
   const boardRows = useMemo<BoardRow[]>(
     () =>
       rows.map((row) => {
         if (!row.truck.isActive) return { ...row, alerts: [], health: "inactive" };
-        const alerts = getTruckAlerts(row.truck.truckType, row.lastDoneByType, row.latestCheck);
+        const alerts = getTruckAlerts(
+          config,
+          row.truck.truckType,
+          row.lastDoneByType,
+          row.latestCheck,
+          row.documentDueDates
+        );
         const health: TruckHealth = alerts.some((a) => a.level === "required")
           ? "required"
           : alerts.length > 0
@@ -43,7 +65,7 @@ export default function AdminTrucksOverview({ rows }: AdminTrucksOverviewProps) 
             : "ok";
         return { ...row, alerts, health };
       }),
-    [rows]
+    [rows, config]
   );
 
   const needsAttention = boardRows
@@ -67,20 +89,38 @@ export default function AdminTrucksOverview({ rows }: AdminTrucksOverviewProps) 
     );
   }, [boardRows, query]);
 
-  if (role !== "admin") {
-    return (
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-amber-800">
-        Admin access required. Switch to Admin view using the role toggle.
-      </div>
-    );
-  }
-
   return (
     <div>
       <PageHeader
-        title="Truck Overview"
-        description="Maintenance board and fleet list. Open a truck to log repairs, record its monthly check and see fuel and shipments."
+        title={isAdminView ? "Truck Overview" : "Trucks"}
+        description={
+          isAdminView
+            ? "Maintenance board and fleet list. Open a truck to log repairs and fuel, record its monthly check and see shipments."
+            : "Maintenance board. Open a truck to log fuel, repairs and its monthly check."
+        }
+        actions={
+          isAdminView && (
+            <button
+              type="button"
+              onClick={() => setIsAddOpen(true)}
+              className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-800"
+            >
+              + Add truck
+            </button>
+          )
+        }
       />
+
+      {isAdminView && (
+        <NewTruckModal
+          isOpen={isAddOpen}
+          onClose={() => setIsAddOpen(false)}
+          onCreated={(truck) => {
+            setIsAddOpen(false);
+            router.push(`/admin/trucks/${truck.id}`);
+          }}
+        />
+      )}
 
       {/* Maintenance board */}
       <section className="mb-8 rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -103,6 +143,7 @@ export default function AdminTrucksOverview({ rows }: AdminTrucksOverviewProps) 
         {needsAttention.length === 0 ? (
           <p className="px-6 py-8 text-center text-sm text-gray-500">
             Every active truck is up to date. Nothing to do this month.
+            {!isAdminView && allClear.length > 0 && " Open a truck below to log fuel or a repair."}
           </p>
         ) : (
           <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-3">
@@ -112,7 +153,8 @@ export default function AdminTrucksOverview({ rows }: AdminTrucksOverviewProps) 
           </div>
         )}
 
-        {allClear.length > 0 && needsAttention.length > 0 && (
+        {/* Non-admins have no fleet list, so this is how they reach the trucks that are all clear. */}
+        {allClear.length > 0 && (needsAttention.length > 0 || !isAdminView) && (
           <p className="border-t border-gray-100 px-6 py-3 text-sm text-gray-500">
             <span className="font-medium text-green-700">All clear:</span>{" "}
             {allClear.map((row, index) => (
@@ -127,7 +169,8 @@ export default function AdminTrucksOverview({ rows }: AdminTrucksOverviewProps) 
         )}
       </section>
 
-      {/* Fleet list */}
+      {/* Fleet list (admins only) */}
+      {isAdminView && (
       <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-6 py-4">
           <div>
@@ -148,7 +191,7 @@ export default function AdminTrucksOverview({ rows }: AdminTrucksOverviewProps) 
           <EmptyState
             icon={<TruckGlyph />}
             title="No trucks found"
-            description={query ? "Try a different search." : "Trucks are added through the database seed."}
+            description={query ? "Try a different search." : "Use Add truck to register the first one."}
           />
         ) : (
           <div className="overflow-x-auto">
@@ -225,7 +268,9 @@ export default function AdminTrucksOverview({ rows }: AdminTrucksOverviewProps) 
                       <td className="whitespace-nowrap px-4 py-2.5">
                         <span className={`inline-flex items-center gap-2 text-xs font-medium ${health.text}`}>
                           <span aria-hidden className={`h-2.5 w-2.5 rounded-full ${health.dot}`} />
-                          {health.label}
+                          {row.health === "inactive" && truck.soldYear
+                            ? `Sold ${truck.soldYear}`
+                            : health.label}
                         </span>
                       </td>
                     </tr>
@@ -236,6 +281,9 @@ export default function AdminTrucksOverview({ rows }: AdminTrucksOverviewProps) 
           </div>
         )}
       </section>
+      )}
+
+      {isAdminView && <MaintenanceSettings config={config} />}
     </div>
   );
 }

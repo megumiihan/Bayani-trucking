@@ -1,4 +1,4 @@
-import type { BillableUi } from "@/lib/bookkeeping";
+import { billableAmountDue, type BillableUi } from "@/lib/bookkeeping";
 
 function csvCell(value: string | number) {
   const text = String(value);
@@ -20,6 +20,7 @@ export function exportBillablesToCsv(billables: BillableUi[]) {
     "Output tax",
     "Withholding tax",
     "Total tax",
+    "Total amount due",
     "VAT deduction",
     "Withholding tax deduction",
     "Logged by",
@@ -36,6 +37,7 @@ export function exportBillablesToCsv(billables: BillableUi[]) {
     row.outputTax.toFixed(2),
     row.withholdingTax.toFixed(2),
     row.totalTax.toFixed(2),
+    billableAmountDue(row.totalInvoiceAmt, row.withholdingTax).toFixed(2),
     row.vatDeduction ? "Yes" : "No",
     row.withholdingTaxDeduction ? "Yes" : "No",
     row.createdByName,

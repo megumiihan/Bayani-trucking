@@ -47,6 +47,8 @@ enum EmployeeRole {
   DRIVER
   HELPER
   BOTH
+  /// Office staff. Never a driver/helper on a shipment; logs shipments and payouts.
+  SECRETARY
 }
 
 // 1b. PROFILES (one row per Supabase Auth user)
@@ -73,10 +75,14 @@ model Profile {
   clientRateChanges        ClientRateHistory[]
   loggedTruckRepairs       TruckRepair[]
   loggedTruckChecks        TruckCheck[]
+  createdLeads             Lead[]
+  loggedLeadActivities     LeadActivity[]
 }
 
 enum AppRole {
   ADMIN
+  /// Logs and edits shipments and payouts, sees employees and trucks, but not totals.
+  SECRETARY
   EMPLOYEE
 }
 
@@ -97,6 +103,8 @@ model Truck {
   /// Year the company bought the truck (often later than yearModel).
   purchaseYear          Int?
   purchasePrice         Float?
+  /// Year the truck was sold. Set when the truck is marked inactive.
+  soldYear              Int?
   /// Object path in the PRIVATE `truck-documents` bucket; viewed via signed URLs.
   certificatePath       String?
   /// Original file name of the certificate, for display.
@@ -107,6 +115,25 @@ model Truck {
   expenses  Expense[]
   repairs   TruckRepair[]
   checks    TruckCheck[]
+  documents TruckDocument[]
+}
+
+/// Title, LTFRB franchise, NMIS accreditation, comprehensive insurance, etc.
+/// One row per truck and document type (keys in TRUCK_DOCUMENT_TYPES, lib/truckMaintenance.ts).
+model TruckDocument {
+  id             String   @id @default(uuid())
+  truckId        String
+  truck          Truck    @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  docType        String
+  /// Next renewal; shows on the maintenance board when overdue or due soon.
+  renewalDueDate DateTime
+  /// Object path in the PRIVATE `truck-documents` bucket; viewed via signed URLs.
+  filePath       String?
+  fileName       String?
+  updatedAt      DateTime @updatedAt
+  createdAt      DateTime @default(now())
+
+  @@unique([truckId, docType])
 }
 
 /// Repairs and scheduled maintenance done on a truck.
@@ -115,7 +142,7 @@ model TruckRepair {
   truckId         String
   truck           Truck    @relation(fields: [truckId], references: [id], onDelete: Cascade)
   date            DateTime
-  /// Key from MAINTENANCE_TYPES in lib/truckMaintenance.ts (e.g. OIL_CHANGE, REPAIR).
+  /// MaintenanceType.key (e.g. OIL_CHANGE, REPAIR).
   maintenanceType String
   description     String   @default("")
   shop            String   @default("")
@@ -136,7 +163,7 @@ model TruckCheck {
   truckId     String
   truck       Truck    @relation(fields: [truckId], references: [id], onDelete: Cascade)
   checkedAt   DateTime
-  /// { [itemKey]: "ok" | "issue" } using CHECK_ITEMS keys from lib/truckMaintenance.ts.
+  /// { [itemKey]: "ok" | "issue" } using TruckCheckItem keys.
   items       Json
   notes       String   @default("")
   createdById String
@@ -146,10 +173,49 @@ model TruckCheck {
   @@index([truckId, checkedAt])
 }
 
+/// Scheduled maintenance types (and the unscheduled "REPAIR" type), editable by admins
+/// on the Trucks page and applied to every truck. Removing one archives it so old
+/// repairs keep their label.
+model MaintenanceType {
+  /// Stored on TruckRepair.maintenanceType.
+  key            String   @id
+  label          String
+  /// Months between services. Null = not scheduled (one-off repairs).
+  intervalMonths Int?
+  /// Mandatory types show as "Required" when overdue; the rest as "Check".
+  mandatory      Boolean  @default(false)
+  /// Only applies to refrigerated trucks.
+  reeferOnly     Boolean  @default(false)
+  sortOrder      Int      @default(0)
+  archived       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+}
+
+/// Items on the monthly condition checklist, applied to every truck.
+/// Removing one archives it so old checks keep their label.
+model TruckCheckItem {
+  /// Key used in TruckCheck.items.
+  key        String   @id
+  label      String
+  reeferOnly Boolean  @default(false)
+  sortOrder  Int      @default(0)
+  archived   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
+
 // 3. CLIENT MANAGEMENT
 model Client {
   id                 String          @id @default(uuid())
   name               String          @unique
+  /// Registered business name, e.g. "PEPSI COLA PRODUCTS PHILIPPINES INC".
+  legalName          String          @default("")
+  address            String          @default("")
+  /// BIR TIN, stored as "000 168 541 067" (branch code last).
+  tin                String          @default("")
+  /// One-off client added from Bookkeeping ("Others"). Listed on Clients &
+  /// suppliers and in bookkeeping dropdowns, hidden from the Clients page,
+  /// Routes & Rates and the shipment form.
+  isTemporary        Boolean         @default(false)
   calcType           CalculationType @default(DESTINATION)
   pigheadDriverRate  Float?
   pigheadHelperRate  Float?
@@ -164,6 +230,21 @@ model Client {
   clientRateHistory  ClientRateHistory[]
   billables          Billable[]
   collectionReceipts CollectionReceipt[]
+  leads              Lead[]
+}
+
+/// Vendors the company buys from (fuel, parts, repairs). Their registered name,
+/// address and TIN fill in expense and disbursement entries. Not unique by name:
+/// one company can have several branches, each with its own address and TIN.
+model Supplier {
+  id        String   @id @default(uuid())
+  name      String
+  address   String   @default("")
+  /// BIR TIN, stored as "009 837 423 00020" (branch code last).
+  tin       String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([name])
 }
 
 enum CalculationType {
@@ -195,7 +276,7 @@ model DestinationRoute {
   @@unique([clientId, routeName, distance, weightKg])
 }
 
-// Audit log when admins change destination-based route rates.
+// Audit log when admins add or change destination, weight or livestock route rates.
 model DestinationRateHistory {
   id                      String            @id @default(uuid())
   clientId                String
@@ -210,6 +291,16 @@ model DestinationRateHistory {
   newDriverBaseRate       Float
   newHelperBaseRate       Float
   newExtraHelperBaseRate  Float
+  /// Weight tier (kg) when the route belongs to a weight-based client.
+  weightKg                Int?
+  prevSameDriverRate      Float?
+  prevNewDriverRate       Float?
+  prevNewHelperRate       Float?
+  newSameDriverRate       Float?
+  newNewDriverRate        Float?
+  newNewHelperRate        Float?
+  /// True when this entry records a newly added route rather than an edit.
+  isCreated               Boolean           @default(false)
   changedById             String
   changedBy               Profile           @relation(fields: [changedById], references: [id])
   changedAt               DateTime          @default(now())
@@ -286,9 +377,11 @@ model ShipmentLog {
   helperPayout      Float
   extraHelperPayout Float @default(0.0)
 
-  remarks    String?
-  isFlagged  Boolean @default(false)
-  isApproved Boolean @default(false)
+  remarks             String?
+  isFlagged           Boolean @default(false)
+  isApproved          Boolean @default(false)
+  /// Secretary's pre-approval. Display only: payouts still count once isApproved (admin) is set.
+  isSecretaryApproved Boolean @default(false)
 
   clientId    String
   client      Client   @relation(fields: [clientId], references: [id])
@@ -365,6 +458,7 @@ model Billable {
   createdById             String
   createdBy               Profile  @relation(fields: [createdById], references: [id])
   createdAt               DateTime @default(now())
+  collectionItem          CollectionReceiptItem?
 
   @@index([date(sort: Desc)])
   @@index([clientId])
@@ -376,6 +470,8 @@ model Disbursement {
   payee       String
   amount      Float
   referenceNo String?
+  invoiceNo   String   @default("")
+  vatRegNo    String   @default("")
   description String?
   createdById String
   createdBy   Profile  @relation(fields: [createdById], references: [id])
@@ -398,7 +494,120 @@ model CollectionReceipt {
   createdById      String
   createdBy        Profile  @relation(fields: [createdById], references: [id])
   createdAt        DateTime @default(now())
+  items            CollectionReceiptItem[]
 
   @@index([datePaid(sort: Desc)])
   @@index([clientId])
+}
+
+/// One sales invoice (billable) paid by a collection receipt. Buyer details and the
+/// amount due are snapshotted when the receipt is logged.
+model CollectionReceiptItem {
+  id           String            @id @default(uuid())
+  receiptId    String
+  receipt      CollectionReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  /// Unique: an SI can only be collected once.
+  billableId   String?           @unique
+  billable     Billable?         @relation(fields: [billableId], references: [id], onDelete: SetNull)
+  invoiceNo    String
+  buyerName    String            @default("")
+  buyerAddress String            @default("")
+  vatRegNo     String            @default("")
+  /// Total invoice amount − withholding tax.
+  amountDue    Float
+
+  @@index([receiptId])
+}
+
+// 9. SALES LEADS (prospective clients — the Leads tab)
+enum LeadStatus {
+  NEW
+  CONTACTED
+  INTERESTED
+  QUOTED
+  WON
+  LOST
+  DO_NOT_CONTACT
+}
+
+enum LeadType {
+  CONTRACT
+  ONE_TIME_MOVE
+}
+
+enum LeadSource {
+  WEBSITE
+  FACEBOOK_SEARCH
+  FACEBOOK_PAGE_INQUIRY
+  REFERRAL
+  WALK_IN
+  OTHER
+}
+
+enum LeadActivityKind {
+  CALL
+  EMAIL
+  FB_MESSAGE
+  MEETING
+  NOTE
+}
+
+model Lead {
+  id             String     @id @default(uuid())
+  companyName    String
+  contactPerson  String     @default("")
+  phone          String     @default("")
+  email          String     @default("")
+  website        String     @default("")
+  facebookUrl    String     @default("")
+  municipality   String     @default("")
+  /// One of REGION_II_PROVINCES in lib/leads.ts, or free text.
+  province       String     @default("")
+  /// e.g. poultry, piggery, rice mill, hardware.
+  industry       String     @default("")
+  type           LeadType   @default(CONTRACT)
+  source         LeadSource @default(OTHER)
+  status         LeadStatus @default(NEW)
+  nextFollowUpAt DateTime?
+  notes          String     @default("")
+  /// Billing client created when this lead was won.
+  clientId       String?
+  client         Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  createdById    String
+  createdBy      Profile    @relation(fields: [createdById], references: [id])
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  activities LeadActivity[]
+
+  @@index([status])
+  @@index([nextFollowUpAt])
+}
+
+model LeadActivity {
+  id             String           @id @default(uuid())
+  leadId         String
+  lead           Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  kind           LeadActivityKind
+  summary        String
+  outcome        String           @default("")
+  occurredAt     DateTime         @default(now())
+  emailSubject   String?
+  /// SMTP Message-ID of an email sent from the app.
+  gmailMessageId String?
+  createdById    String
+  createdBy      Profile          @relation(fields: [createdById], references: [id])
+  createdAt      DateTime         @default(now())
+
+  @@index([leadId, occurredAt(sort: Desc)])
+}
+
+/// Reusable pitch emails. Placeholders: {{contactPerson}}, {{companyName}}, {{municipality}}.
+model EmailTemplate {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  subject   String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
