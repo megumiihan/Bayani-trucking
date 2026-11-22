@@ -16,17 +16,10 @@ export default async function TruckDetailPage({ params }: TruckDetailPageProps) 
   if (!detail) notFound();
 
   const isAdmin = user.role === "admin";
-  // Non-admins can log records but not see purchase details or the certificate file.
-  const truck = isAdmin
-    ? detail.truck
-    : { ...detail.truck, purchaseYear: null, purchasePrice: null, hasCertificate: false, certificateName: null };
-
-  // Non-admins still get renewal due dates (they feed the maintenance alerts), but not the files.
-  const documents = isAdmin
-    ? detail.documents
-    : detail.documents.map((doc) => ({ ...doc, hasFile: false, fileName: null }));
+  // Non-admins can log records and view the truck's papers, but not see purchase details.
+  const truck = isAdmin ? detail.truck : { ...detail.truck, purchaseYear: null, purchasePrice: null };
 
   return (
-    <AdminTruckDetail {...detail} truck={truck} documents={documents} config={config} canManage={isAdmin} />
+    <AdminTruckDetail {...detail} truck={truck} documents={detail.documents} config={config} canManage={isAdmin} />
   );
 }

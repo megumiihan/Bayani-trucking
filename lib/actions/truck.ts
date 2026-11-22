@@ -564,7 +564,8 @@ export async function removeTruckCertificate(id: string): Promise<Result<{ truck
 /** Short-lived link to open the certificate. Generated per click; never stored. */
 export async function getTruckCertificateUrl(id: string): Promise<Result<{ url: string }>> {
   try {
-    await requireAdmin();
+    // Staff and drivers may view truck papers; only admins change them.
+    await requireTruckLogger();
     const truck = await truckExists(id);
     if (!truck?.certificatePath) return { success: false, error: "No certificate on file." };
 
@@ -693,7 +694,8 @@ export async function getTruckDocumentUrl(
   docType: string
 ): Promise<Result<{ url: string }>> {
   try {
-    await requireAdmin();
+    // Staff and drivers may view truck papers; only admins change them.
+    await requireTruckLogger();
     const doc = await prisma.truckDocument.findUnique({
       where: { truckId_docType: { truckId, docType } },
       select: { filePath: true },

@@ -748,9 +748,9 @@ function TruckProfileCard({
         )}
       </div>
 
-      {/* Files are admin-only: non-admins don't see the certificate at all. */}
-      {canManage && <CertificateField truck={truck} />}
-      {canManage && <DocumentsField truck={truck} documents={documents} />}
+      {/* Everyone on this page can view the papers; only admins upload, edit or remove. */}
+      <CertificateField truck={truck} canManage={canManage} />
+      <DocumentsField truck={truck} documents={documents} canManage={canManage} />
     </section>
   );
 }
@@ -768,7 +768,7 @@ function Missing({ text = "Not set" }: { text?: string }) {
   return <span className="font-normal text-gray-400">{text}</span>;
 }
 
-function CertificateField({ truck }: { truck: Truck }) {
+function CertificateField({ truck, canManage }: { truck: Truck; canManage: boolean }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<"upload" | "remove" | "open" | null>(null);
@@ -851,25 +851,29 @@ function CertificateField({ truck }: { truck: Truck }) {
           >
             {busy === "open" ? "Opening…" : truck.certificateName || "View certificate"}
           </button>
-          <div className="flex shrink-0 gap-2 text-xs">
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              disabled={busy !== null}
-              className="font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50"
-            >
-              {busy === "upload" ? "Uploading…" : "Replace"}
-            </button>
-            <button
-              type="button"
-              onClick={handleRemove}
-              disabled={busy !== null}
-              className="text-red-600 hover:text-red-700 disabled:opacity-50"
-            >
-              {busy === "remove" ? "Removing…" : "Remove"}
-            </button>
-          </div>
+          {canManage && (
+            <div className="flex shrink-0 gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                disabled={busy !== null}
+                className="font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50"
+              >
+                {busy === "upload" ? "Uploading…" : "Replace"}
+              </button>
+              <button
+                type="button"
+                onClick={handleRemove}
+                disabled={busy !== null}
+                className="text-red-600 hover:text-red-700 disabled:opacity-50"
+              >
+                {busy === "remove" ? "Removing…" : "Remove"}
+              </button>
+            </div>
+          )}
         </div>
+      ) : !canManage ? (
+        <p className="mt-2 text-sm text-gray-400">No certificate on file</p>
       ) : (
         <button
           type="button"
@@ -891,7 +895,15 @@ const renewalStyles = {
   ok: "text-gray-600",
 } as const;
 
-function DocumentsField({ truck, documents }: { truck: Truck; documents: TruckDocumentUi[] }) {
+function DocumentsField({
+  truck,
+  documents,
+  canManage,
+}: {
+  truck: Truck;
+  documents: TruckDocumentUi[];
+  canManage: boolean;
+}) {
   const router = useRouter();
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -926,17 +938,19 @@ function DocumentsField({ truck, documents }: { truck: Truck; documents: TruckDo
   return (
     <div className="mt-5 border-t border-gray-100 pt-4">
       <h2 className="text-xs font-medium uppercase tracking-wider text-gray-500">Documents</h2>
-      <TruckDocumentModal
-        docType={editing}
-        truckId={truck.id}
-        plateNumber={truck.plateNumber}
-        document={editing ? byType.get(editing) ?? null : null}
-        onClose={() => setEditing(null)}
-        onSaved={() => {
-          setEditing(null);
-          router.refresh();
-        }}
-      />
+      {canManage && (
+        <TruckDocumentModal
+          docType={editing}
+          truckId={truck.id}
+          plateNumber={truck.plateNumber}
+          document={editing ? byType.get(editing) ?? null : null}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            router.refresh();
+          }}
+        />
+      )}
       <ul className="mt-2 space-y-2.5">
         {TRUCK_DOCUMENT_TYPES.map(({ key, label }) => {
           const doc = byType.get(key);
@@ -957,15 +971,17 @@ function DocumentsField({ truck, documents }: { truck: Truck; documents: TruckDo
                       View
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => setEditing(key)}
-                    disabled={busy !== null}
-                    className="font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50"
-                  >
-                    {doc ? "Edit" : "Add"}
-                  </button>
-                  {doc && (
+                  {canManage && (
+                    <button
+                      type="button"
+                      onClick={() => setEditing(key)}
+                      disabled={busy !== null}
+                      className="font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50"
+                    >
+                      {doc ? "Edit" : "Add"}
+                    </button>
+                  )}
+                  {canManage && doc && (
                     <button
                       type="button"
                       onClick={() => handleRemove(key, label)}
