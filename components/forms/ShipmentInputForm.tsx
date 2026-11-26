@@ -590,10 +590,6 @@ export default function ShipmentInputForm({
                     placeholder="e.g. 8"
                     className={inputClass}
                   />
-                  <span className="mt-1 block text-xs text-gray-500">
-                    Driver ₱{driverBase} + ₱{driverHeadRate ?? "—"}/head · Helper
-                    ₱{helperBase} + ₱{helperHeadRate ?? "—"}/head
-                  </span>
                 </Field>
               )}
             </div>
