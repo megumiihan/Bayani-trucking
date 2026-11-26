@@ -13,6 +13,8 @@ interface RecordPayoutModalProps {
   error: string | null;
   onClose: () => void;
   onSave: (amount: number, paidAt: string, note: string) => Promise<void>;
+  /** When set, the modal edits this existing payout instead of logging a new one. */
+  editing?: { amount: number; paidAt: string; note: string | null } | null;
 }
 
 function todayISO() {
@@ -27,18 +29,25 @@ export default function RecordPayoutModal({
   error,
   onClose,
   onSave,
+  editing = null,
 }: RecordPayoutModalProps) {
   const [amount, setAmount] = useState("");
   const [paidAt, setPaidAt] = useState(todayISO);
   const [note, setNote] = useState("");
+  const isEditing = editing != null;
 
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return;
+    if (editing) {
+      setAmount(String(editing.amount));
+      setPaidAt(editing.paidAt);
+      setNote(editing.note ?? "");
+    } else {
       setAmount(balanceDue != null && balanceDue > 0 ? String(balanceDue) : "");
       setPaidAt(todayISO());
       setNote("");
     }
-  }, [isOpen, balanceDue]);
+  }, [isOpen, balanceDue, editing]);
 
   useEscapeToClose(isOpen, onClose, isSaving);
 
@@ -69,14 +78,15 @@ export default function RecordPayoutModal({
           id="record-payout-title"
           className="text-lg font-semibold text-gray-900"
         >
-          Record payout
+          {isEditing ? "Edit payout" : "Record payout"}
         </h2>
         <p className="mt-1 text-sm text-gray-500">
-          Log cash paid to {employeeName}. This does not delete shipment
-          earnings — it adds a payment row to the ledger.
+          {isEditing
+            ? `Correct this payout to ${employeeName}. The ledger balance updates to match.`
+            : `Log cash paid to ${employeeName}. This does not delete shipment earnings — it adds a payment row to the ledger.`}
         </p>
 
-        {balanceDue != null && (
+        {balanceDue != null && !isEditing && (
           <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 text-sm">
             <p className="text-xs font-medium uppercase tracking-wider text-gray-500">
               Balance due
@@ -153,7 +163,7 @@ export default function RecordPayoutModal({
               disabled={isSaving || !Number.isFinite(parsedAmount) || parsedAmount <= 0}
               className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-gray-300"
             >
-              {isSaving ? "Saving…" : "Save payout"}
+              {isSaving ? "Saving…" : isEditing ? "Save changes" : "Save payout"}
             </button>
           </div>
         </form>

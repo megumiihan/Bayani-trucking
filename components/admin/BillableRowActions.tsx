@@ -4,7 +4,8 @@ import type { ReactNode } from "react";
 
 interface BillableRowActionsProps {
   onEdit: () => void;
-  onDelete: () => void;
+  /** Omit to show only the edit button. */
+  onDelete?: () => void;
   editLabel?: string;
   deleteLabel?: string;
 }
@@ -27,13 +28,15 @@ export default function BillableRowActions({
       >
         <PencilIcon />
       </ActionIconButton>
-      <ActionIconButton
-        label={deleteLabel}
-        onClick={onDelete}
-        className={`${baseButton} border-slate-200/80 text-slate-400 hover:border-rose-200 hover:bg-rose-50/60 hover:text-rose-600 focus-visible:ring-rose-300`}
-      >
-        <TrashIcon />
-      </ActionIconButton>
+      {onDelete && (
+        <ActionIconButton
+          label={deleteLabel}
+          onClick={onDelete}
+          className={`${baseButton} border-slate-200/80 text-slate-400 hover:border-rose-200 hover:bg-rose-50/60 hover:text-rose-600 focus-visible:ring-rose-300`}
+        >
+          <TrashIcon />
+        </ActionIconButton>
+      )}
     </div>
   );
 }

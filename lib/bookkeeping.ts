@@ -1,8 +1,9 @@
+/** Ordered in pairs: money in (billables, collections), then money out (expenses, disbursements). */
 export const BOOKKEEPING_LEDGERS = [
   "billables",
+  "collection-receipt",
   "expenses",
   "disbursement",
-  "collection-receipt",
 ] as const;
 
 export type BookkeepingLedger = (typeof BOOKKEEPING_LEDGERS)[number];
@@ -133,6 +134,8 @@ export type CollectionReceiptItemUi = {
   buyerAddress: string;
   vatRegNo: string;
   amountDue: number;
+  /** The SI's date (YYYY-MM-DD); null if the SI was deleted. */
+  siDate: string | null;
 };
 
 /**

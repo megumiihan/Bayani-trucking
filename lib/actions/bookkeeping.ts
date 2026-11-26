@@ -314,29 +314,39 @@ export type SaveDisbursementResult =
   | { success: true; disbursement: DisbursementUi }
   | { success: false; error: string };
 
+/** Validates a disbursement form; returns the fields to write, or an error. */
+function disbursementFields(input: DisbursementWriteInput) {
+  const invalid =
+    requireDate(input.date) ?? requirePositiveAmount(input.amount, "amount");
+  if (invalid) return { ok: false as const, error: invalid };
+
+  const payee = input.payee.trim();
+  if (!payee) return { ok: false as const, error: "Payee is required." };
+
+  return {
+    ok: true as const,
+    data: {
+      date: new Date(input.date),
+      payee,
+      amount: input.amount,
+      referenceNo: input.referenceNo?.trim() || null,
+      invoiceNo: input.invoiceNo?.trim() || "",
+      vatRegNo: input.vatRegNo?.trim() || "",
+      description: input.description?.trim() || null,
+    },
+  };
+}
+
 export async function saveDisbursement(
   input: DisbursementWriteInput
 ): Promise<SaveDisbursementResult> {
   try {
     const user = await requireAdmin();
-    const invalid =
-      requireDate(input.date) ?? requirePositiveAmount(input.amount, "amount");
-    if (invalid) return { success: false, error: invalid };
-
-    const payee = input.payee.trim();
-    if (!payee) return { success: false, error: "Payee is required." };
+    const fields = disbursementFields(input);
+    if (!fields.ok) return { success: false, error: fields.error };
 
     const record = await prisma.disbursement.create({
-      data: {
-        date: new Date(input.date),
-        payee,
-        amount: input.amount,
-        referenceNo: input.referenceNo?.trim() || null,
-        invoiceNo: input.invoiceNo?.trim() || "",
-        vatRegNo: input.vatRegNo?.trim() || "",
-        description: input.description?.trim() || null,
-        createdById: user.id,
-      },
+      data: { ...fields.data, createdById: user.id },
       include: bookkeepingActorInclude,
     });
 
@@ -354,12 +364,59 @@ export async function saveDisbursement(
   }
 }
 
+export async function updateDisbursement(
+  id: string,
+  input: DisbursementWriteInput
+): Promise<SaveDisbursementResult> {
+  try {
+    await requireAdmin();
+    const fields = disbursementFields(input);
+    if (!fields.ok) return { success: false, error: fields.error };
+
+    const record = await prisma.disbursement.update({
+      where: { id },
+      data: fields.data,
+      include: bookkeepingActorInclude,
+    });
+
+    revalidateBookkeeping();
+    return { success: true, disbursement: mapDisbursementToUi(record) };
+  } catch (error) {
+    console.error("[updateDisbursement]", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred while updating the disbursement.",
+    };
+  }
+}
+
 export type SaveCollectionReceiptResult =
   | { success: true; receipt: CollectionReceiptUi; createdClient: Client | null }
   | { success: false; error: string };
 
 export async function saveCollectionReceipt(
   input: CollectionReceiptWriteInput
+): Promise<SaveCollectionReceiptResult> {
+  return writeCollectionReceipt(input, null);
+}
+
+/**
+ * Edits a receipt, including which SIs it covers. SIs dropped from the receipt
+ * become uncollected again; the logger stays the original one.
+ */
+export async function updateCollectionReceipt(
+  id: string,
+  input: CollectionReceiptWriteInput
+): Promise<SaveCollectionReceiptResult> {
+  return writeCollectionReceipt(input, id);
+}
+
+async function writeCollectionReceipt(
+  input: CollectionReceiptWriteInput,
+  existingId: string | null
 ): Promise<SaveCollectionReceiptResult> {
   try {
     const user = await requireAdmin();
@@ -408,7 +465,7 @@ export async function saveCollectionReceipt(
         vatRegNo: true,
         totalInvoiceAmt: true,
         withholdingTax: true,
-        collectionItem: { select: { receipt: { select: { orNumber: true } } } },
+        collectionItem: { select: { receiptId: true, receipt: { select: { orNumber: true } } } },
       },
     });
     if (billables.length !== billableIds.length) {
@@ -421,7 +478,10 @@ export async function saveCollectionReceipt(
         error: `SI ${otherClient.invoiceNo} belongs to a different client.`,
       };
     }
-    const collected = billables.find((b) => b.collectionItem);
+    // When editing, SIs already on this receipt are fine to keep.
+    const collected = billables.find(
+      (b) => b.collectionItem && b.collectionItem.receiptId !== existingId
+    );
     if (collected) {
       return {
         success: false,
@@ -443,19 +503,28 @@ export async function saveCollectionReceipt(
 
     const { record, created } = await prisma.$transaction(async (tx) => {
       const client = await materializeClient(tx, plan);
+      const fields = {
+        datePaid: new Date(input.datePaid),
+        orNumber,
+        collectionAmount,
+        paymentDetails,
+        whoPaid,
+        whoReceived,
+        clientId: client.id,
+        clientName: client.name,
+      };
+      if (existingId) {
+        // Clear the old SI links first so re-adding the same SI doesn't trip its unique key.
+        await tx.collectionReceiptItem.deleteMany({ where: { receiptId: existingId } });
+        const record = await tx.collectionReceipt.update({
+          where: { id: existingId },
+          data: { ...fields, items: { create: items } },
+          include: collectionReceiptInclude,
+        });
+        return { record, created: client.created };
+      }
       const record = await tx.collectionReceipt.create({
-        data: {
-          datePaid: new Date(input.datePaid),
-          orNumber,
-          collectionAmount,
-          items: { create: items },
-          paymentDetails,
-          whoPaid,
-          whoReceived,
-          clientId: client.id,
-          clientName: client.name,
-          createdById: user.id,
-        },
+        data: { ...fields, items: { create: items }, createdById: user.id },
         include: collectionReceiptInclude,
       });
       return { record, created: client.created };
@@ -471,7 +540,7 @@ export async function saveCollectionReceipt(
     );
     if (duplicate) return { success: false, error: duplicate };
 
-    console.error("[saveCollectionReceipt]", error);
+    console.error(existingId ? "[updateCollectionReceipt]" : "[saveCollectionReceipt]", error);
     return {
       success: false,
       error:

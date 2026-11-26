@@ -13,10 +13,11 @@ import {
 import {
   updateEmployeeDetails,
   updateEmployeeRemarks,
+  updateEmployeeRole,
   type EmployeeDetailsInput,
 } from "@/lib/actions/employee";
 import { BOUNTY_EXP_NEW, BOUNTY_EXP_OLD, bountyExpLabel } from "@/lib/weight";
-import { recordSalaryPayment } from "@/lib/actions/payment";
+import { recordSalaryPayment, updateSalaryPayment } from "@/lib/actions/payment";
 import {
   approveShipments,
   setShipmentApproval,
@@ -40,7 +41,7 @@ import Badge from "@/components/ui/Badge";
 function toDetailsForm(employee: Employee): EmployeeDetailsInput {
   return {
     name: employee.name,
-    role: employee.role === "Helper" ? "Helper" : "Driver",
+    role: employee.role,
     bountyExp: employee.bountyExp === BOUNTY_EXP_NEW ? BOUNTY_EXP_NEW : BOUNTY_EXP_OLD,
     isActive: employee.isActive !== false,
     isRegular: employee.isRegular === true,
@@ -54,6 +55,8 @@ interface AdminEmployeeDetailProps {
   loginEmail: string | null;
   /** Null unless the viewer is an admin. */
   governmentIds: GovernmentIds | null;
+  /** A secretary viewing someone whose role they may switch between Driver and Helper. */
+  canSecretaryEditRole?: boolean;
 }
 
 export default function AdminEmployeeDetail({
@@ -62,6 +65,7 @@ export default function AdminEmployeeDetail({
   initialPayments,
   loginEmail,
   governmentIds,
+  canSecretaryEditRole = false,
 }: AdminEmployeeDetailProps) {
   const { role, isStaffView } = useRole();
   // Secretaries log and edit payouts but don't see money totals or account settings.
@@ -74,6 +78,9 @@ export default function AdminEmployeeDetail({
   const [detailsForm, setDetailsForm] = useState<EmployeeDetailsInput>(() =>
     toDetailsForm(employee)
   );
+  const [roleDraft, setRoleDraft] = useState(employee.role);
+  const [isSavingRole, setIsSavingRole] = useState(false);
+  const [roleError, setRoleError] = useState<string | null>(null);
   const [isSavingDetails, setIsSavingDetails] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
@@ -82,6 +89,7 @@ export default function AdminEmployeeDetail({
   const [isPayoutOpen, setIsPayoutOpen] = useState(false);
   const [isSavingPayout, setIsSavingPayout] = useState(false);
   const [payoutError, setPayoutError] = useState<string | null>(null);
+  const [editingPayment, setEditingPayment] = useState<SalaryPaymentUi | null>(null);
   const [showLifetime, setShowLifetime] = useState(false);
 
   // Approval interaction states
@@ -280,6 +288,21 @@ export default function AdminEmployeeDetail({
     router.refresh();
   };
 
+  const handleSaveRole = async () => {
+    setIsSavingRole(true);
+    setRoleError(null);
+
+    const result = await updateEmployeeRole(employee.id, roleDraft);
+    setIsSavingRole(false);
+
+    if (!result.success) {
+      setRoleError(result.error);
+      return;
+    }
+
+    router.refresh();
+  };
+
   const handleSaveRemarks = async () => {
     setIsSavingRemarks(true);
     setSaveError(null);
@@ -304,12 +327,9 @@ export default function AdminEmployeeDetail({
     setIsSavingPayout(true);
     setPayoutError(null);
 
-    const result = await recordSalaryPayment(
-      employee.id,
-      amount,
-      paidAt,
-      note
-    );
+    const result = editingPayment
+      ? await updateSalaryPayment(editingPayment.id, amount, paidAt, note)
+      : await recordSalaryPayment(employee.id, amount, paidAt, note);
     setIsSavingPayout(false);
 
     if (!result.success) {
@@ -317,8 +337,23 @@ export default function AdminEmployeeDetail({
       return;
     }
 
-    setPayments((current) => [result.payment, ...current]);
+    if (editingPayment) {
+      setPayments((current) =>
+        current.map((p) => (p.id === result.payment.id ? result.payment : p))
+      );
+    } else {
+      setPayments((current) => [result.payment, ...current]);
+    }
     setIsPayoutOpen(false);
+    setEditingPayment(null);
+  };
+
+  const handleEditPayment = (paymentId: string) => {
+    const payment = payments.find((p) => p.id === paymentId);
+    if (!payment) return;
+    setPayoutError(null);
+    setEditingPayment(payment);
+    setIsPayoutOpen(true);
   };
 
   return (
@@ -465,7 +500,52 @@ export default function AdminEmployeeDetail({
               </form>
             ) : (
               <dl className="space-y-2.5">
-                <InfoRow icon={<RoleIcon />} label="Role" value={employee.role} />
+                {canSecretaryEditRole ? (
+                  <div>
+                    <InfoRow
+                      icon={<RoleIcon />}
+                      label="Role"
+                      value={
+                        <select
+                          aria-label="Role"
+                          value={roleDraft}
+                          disabled={isSavingRole}
+                          onChange={(e) => {
+                            setRoleDraft(e.target.value as Employee["role"]);
+                            setRoleError(null);
+                          }}
+                          className="-my-1 rounded-md border border-gray-300 bg-white px-2 py-0.5 text-sm font-semibold text-gray-900"
+                        >
+                          <option value="Driver">Driver</option>
+                          <option value="Helper">Helper</option>
+                        </select>
+                      }
+                    />
+                    {roleDraft !== employee.role && (
+                      <div className="mt-2 flex gap-2 pl-6">
+                        <button
+                          type="button"
+                          onClick={handleSaveRole}
+                          disabled={isSavingRole}
+                          className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {isSavingRole ? "Saving…" : "Save role"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRoleDraft(employee.role)}
+                          disabled={isSavingRole}
+                          className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                    {roleError && <p className="mt-1 pl-6 text-xs text-red-600">{roleError}</p>}
+                  </div>
+                ) : (
+                  <InfoRow icon={<RoleIcon />} label="Role" value={employee.role} />
+                )}
                 <InfoRow
                   icon={<StatusIcon />}
                   label="Status"
@@ -647,6 +727,7 @@ export default function AdminEmployeeDetail({
               type="button"
               onClick={() => {
                 setPayoutError(null);
+                setEditingPayment(null);
                 setIsPayoutOpen(true);
               }}
               className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
@@ -701,6 +782,7 @@ export default function AdminEmployeeDetail({
                     row={row}
                     onToggleApproval={handleToggleApproval}
                     onTogglePreApproval={handleTogglePreApproval}
+                    onEditPayment={handleEditPayment}
                     isAdminView={isAdminView}
                     isApproving={approvingId === row.shipmentId}
                   />
@@ -720,9 +802,11 @@ export default function AdminEmployeeDetail({
         onClose={() => {
           if (isSavingPayout) return;
           setIsPayoutOpen(false);
+          setEditingPayment(null);
           setPayoutError(null);
         }}
         onSave={handleRecordPayout}
+        editing={editingPayment}
       />
     </div>
   );
@@ -732,12 +816,14 @@ function LedgerRow({
   row,
   onToggleApproval,
   onTogglePreApproval,
+  onEditPayment,
   isAdminView,
   isApproving,
 }: {
   row: ReturnType<typeof buildPayoutLedger>[number];
   onToggleApproval: (shipmentId: string, currentApproved: boolean) => void;
   onTogglePreApproval: (shipmentId: string, current: boolean) => void;
+  onEditPayment: (paymentId: string) => void;
   isAdminView: boolean;
   isApproving: boolean;
 }) {
@@ -856,7 +942,15 @@ function LedgerRow({
         {row.note || "—"}
       </td>
       <td className="whitespace-nowrap px-4 py-3">
-        {row.kind === "shipment" && row.shipmentId && !isAdminView ? (
+        {isPayment && row.paymentId && isAdminView ? (
+          <button
+            type="button"
+            onClick={() => onEditPayment(row.paymentId!)}
+            className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          >
+            Edit
+          </button>
+        ) : row.kind === "shipment" && row.shipmentId && !isAdminView ? (
           row.approved ? (
             <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-emerald-700">
               <span className="font-semibold">✓</span> Approved

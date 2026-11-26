@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { isLoginDisabled } from "@/lib/auth";
 
 export type SignInResult = { success: false; error: string } | { success: true };
 
@@ -43,7 +44,7 @@ export async function signIn(
 
     const profile = await prisma.profile.findUnique({
       where: { id: data.user.id },
-      select: { id: true },
+      select: { id: true, role: true, employee: { select: { isActive: true } } },
     });
 
     if (!profile) {
@@ -51,6 +52,14 @@ export async function signIn(
       return {
         success: false,
         error: "This account has no profile yet. Ask an admin to set it up.",
+      };
+    }
+
+    if (isLoginDisabled(profile)) {
+      await supabase.auth.signOut();
+      return {
+        success: false,
+        error: "This account is inactive. Ask an admin if you need access again.",
       };
     }
 

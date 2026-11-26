@@ -142,6 +142,7 @@ export interface PayoutLedgerRow {
   /** Secretary pre-approval (display only). */
   secretaryApproved?: boolean;
   shipmentId?: string;
+  paymentId?: string;
   /** Who logged the shipment or payment. */
   loggedBy: string | null;
 }
@@ -187,6 +188,7 @@ export function buildPayoutLedger(
       note: payment.note,
       earned: 0,
       paid: payment.amount,
+      paymentId: payment.id,
       loggedBy: payment.createdByName,
     })
   );

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireStaff } from "@/lib/auth";
 import { mapEmployeeToUi, toDbRole, toUiRole } from "@/lib/mappers/employee";
 import { trimOrNull } from "@/lib/mappers/shipmentRemarks";
 import { prisma } from "@/lib/prisma";
@@ -121,6 +121,65 @@ export async function updateEmployeeDetails(
         error instanceof Error
           ? error.message
           : "An unexpected error occurred while updating the employee.",
+    };
+  }
+}
+
+/**
+ * Role-only edit for office staff. Secretaries can switch people between Driver and
+ * Helper; making someone a Secretary (or taking that away) changes what their login
+ * can reach, so that stays with admins.
+ */
+export async function updateEmployeeRole(
+  id: string,
+  role: EmployeeRole
+): Promise<UpdateEmployeeRemarksResult> {
+  try {
+    const user = await requireStaff();
+
+    if (!EMPLOYEE_ROLES.includes(role)) {
+      return { success: false, error: "Role must be Driver, Helper or Secretary." };
+    }
+
+    const existing = await prisma.employee.findUnique({
+      where: { id },
+      select: { role: true },
+    });
+    if (!existing) return { success: false, error: "Employee not found." };
+
+    if (user.role !== "admin") {
+      if (user.employeeId === id) {
+        return { success: false, error: "Ask an admin to change your own role." };
+      }
+      if (role === "Secretary" || existing.role === "SECRETARY") {
+        return { success: false, error: "Only an admin can add or remove the Secretary role." };
+      }
+    }
+
+    const updated = await prisma.employee.update({
+      where: { id },
+      data: { role: toDbRole(role) },
+    });
+
+    // Keep the login's access in step with the role. Admin logins are left alone.
+    await prisma.profile.updateMany({
+      where: { employeeId: id, role: { not: "ADMIN" } },
+      data: { role: role === "Secretary" ? "SECRETARY" : "EMPLOYEE" },
+    });
+
+    revalidatePath("/admin/employees");
+    revalidatePath(`/admin/employees/${id}`);
+    revalidatePath("/admin/bookkeeping");
+    revalidatePath("/employee/profile");
+    revalidatePath("/employee/shipments/new");
+    revalidatePath("/");
+
+    return { success: true, employee: mapEmployeeToUi(updated) };
+  } catch (error) {
+    console.error("[updateEmployeeRole]", error);
+    return {
+      success: false,
+      error: errorMessage(error, "An unexpected error occurred while updating the role."),
     };
   }
 }

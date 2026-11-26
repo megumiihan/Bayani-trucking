@@ -5,6 +5,7 @@ import {
   billableAmountDue,
   roundMoney,
   type BillableUi,
+  type CollectionReceiptUi,
   type CollectionReceiptWriteInput,
 } from "@/lib/bookkeeping";
 import type { Client } from "@/lib/clients";
@@ -21,6 +22,8 @@ interface LogCollectionReceiptModalProps {
   billables: BillableUi[];
   /** Billables already paid on another receipt; they can't be picked again. */
   collectedBillableIds: Set<string>;
+  /** When set, the form edits this receipt; its own SIs stay pickable. */
+  receipt?: CollectionReceiptUi | null;
   onClose: () => void;
   onSave: (input: CollectionReceiptWriteInput) => Promise<void>;
 }
@@ -36,9 +39,11 @@ export default function LogCollectionReceiptModal({
   clients,
   billables,
   collectedBillableIds,
+  receipt,
   onClose,
   onSave,
 }: LogCollectionReceiptModalProps) {
+  const isEditing = Boolean(receipt);
   const [clientId, setClientId] = useState("");
   const [orNumber, setOrNumber] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -51,24 +56,36 @@ export default function LogCollectionReceiptModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setClientId("");
-    setOrNumber("");
-    setSelectedIds(new Set());
-    setPaymentDetails("");
-    setDatePaid(todayISO());
-    setWhoPaid("");
-    setWhoReceived("");
+    setClientId(receipt?.clientId ?? "");
+    setOrNumber(receipt?.orNumber ?? "");
+    setSelectedIds(
+      new Set(receipt?.items.flatMap((item) => (item.billableId ? [item.billableId] : [])) ?? [])
+    );
+    setPaymentDetails(receipt?.paymentDetails ?? "");
+    setDatePaid(receipt?.datePaid ?? todayISO());
+    setWhoPaid(receipt?.whoPaid ?? "");
+    setWhoReceived(receipt?.whoReceived ?? "");
     setOther({ name: "", address: "", tin: "" });
-    setManualAmount("");
-  }, [isOpen]);
+    setManualAmount(receipt && receipt.items.length === 0 ? String(receipt.collectionAmount) : "");
+  }, [isOpen, receipt]);
+
+  // SIs on the receipt being edited count as open for it.
+  const ownBillableIds = useMemo(
+    () => new Set(receipt?.items.flatMap((item) => (item.billableId ? [item.billableId] : [])) ?? []),
+    [receipt]
+  );
 
   // The client's SIs that haven't been collected yet, oldest first.
   const openBillables = useMemo(
     () =>
       billables
-        .filter((b) => b.clientId === clientId && !collectedBillableIds.has(b.id))
+        .filter(
+          (b) =>
+            b.clientId === clientId &&
+            (!collectedBillableIds.has(b.id) || ownBillableIds.has(b.id))
+        )
         .sort((a, b) => a.date.localeCompare(b.date) || a.invoiceNo.localeCompare(b.invoiceNo)),
-    [billables, clientId, collectedBillableIds]
+    [billables, clientId, collectedBillableIds, ownBillableIds]
   );
 
   useEscapeToClose(isOpen, onClose, isSaving);
@@ -130,7 +147,7 @@ export default function LogCollectionReceiptModal({
           id="log-collection-receipt-title"
           className="text-lg font-semibold text-gray-900"
         >
-          Log collection receipt
+          {isEditing ? `Edit collection receipt · OR ${receipt?.orNumber}` : "Log collection receipt"}
         </h2>
         <p className="mt-1 text-sm text-gray-500">
           Record an official receipt for money collected. Pick the client, then tick the
@@ -394,7 +411,7 @@ export default function LogCollectionReceiptModal({
               disabled={isSaving || !canSave}
               className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-gray-300"
             >
-              {isSaving ? "Saving…" : "Save collection receipt"}
+              {isSaving ? "Saving…" : isEditing ? "Save changes" : "Save collection receipt"}
             </button>
           </div>
         </form>

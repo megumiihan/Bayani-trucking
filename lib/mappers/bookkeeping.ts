@@ -27,7 +27,10 @@ export const billableInclude = {
 export const collectionReceiptInclude = {
   ...bookkeepingActorInclude,
   client: { select: { id: true, name: true } },
-  items: { orderBy: { invoiceNo: "asc" } },
+  items: {
+    orderBy: { invoiceNo: "asc" },
+    include: { billable: { select: { date: true } } },
+  },
 } as const;
 
 type BookkeepingActor = Pick<Profile, "email"> & {
@@ -89,7 +92,7 @@ export function mapCollectionReceiptToUi(
   record: CollectionReceipt & {
     createdBy: BookkeepingActor;
     client: Pick<Client, "id" | "name"> | null;
-    items: CollectionReceiptItem[];
+    items: (CollectionReceiptItem & { billable: { date: Date } | null })[];
   }
 ): CollectionReceiptUi {
   return {
@@ -111,6 +114,7 @@ export function mapCollectionReceiptToUi(
       buyerAddress: item.buyerAddress,
       vatRegNo: item.vatRegNo,
       amountDue: item.amountDue,
+      siDate: item.billable ? isoDate(item.billable.date) : null,
     })),
   };
 }

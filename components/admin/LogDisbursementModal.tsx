@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import type { DisbursementWriteInput } from "@/lib/bookkeeping";
+import type { DisbursementUi, DisbursementWriteInput } from "@/lib/bookkeeping";
 import { inputClass } from "@/components/ui/formStyles";
 import { useEscapeToClose } from "@/components/ui/useEscapeToClose";
 import SupplierPicker from "@/components/admin/SupplierPicker";
@@ -12,6 +12,8 @@ interface LogDisbursementModalProps {
   isSaving: boolean;
   error: string | null;
   suppliers: Supplier[];
+  /** When set, the form edits this disbursement instead of logging a new one. */
+  disbursement?: DisbursementUi | null;
   onClose: () => void;
   onSave: (input: DisbursementWriteInput) => Promise<void>;
 }
@@ -25,9 +27,11 @@ export default function LogDisbursementModal({
   isSaving,
   error,
   suppliers,
+  disbursement,
   onClose,
   onSave,
 }: LogDisbursementModalProps) {
+  const isEditing = Boolean(disbursement);
   const [date, setDate] = useState(todayISO);
   const [payee, setPayee] = useState("");
   const [amount, setAmount] = useState("");
@@ -38,14 +42,14 @@ export default function LogDisbursementModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setDate(todayISO());
-    setPayee("");
-    setAmount("");
-    setReferenceNo("");
-    setInvoiceNo("");
-    setVatRegNo("");
-    setDescription("");
-  }, [isOpen]);
+    setDate(disbursement?.date ?? todayISO());
+    setPayee(disbursement?.payee ?? "");
+    setAmount(disbursement ? String(disbursement.amount) : "");
+    setReferenceNo(disbursement?.referenceNo ?? "");
+    setInvoiceNo(disbursement?.invoiceNo ?? "");
+    setVatRegNo(disbursement?.vatRegNo ?? "");
+    setDescription(disbursement?.description ?? "");
+  }, [isOpen, disbursement]);
 
   useEscapeToClose(isOpen, onClose, isSaving);
 
@@ -84,7 +88,7 @@ export default function LogDisbursementModal({
           id="log-disbursement-title"
           className="text-lg font-semibold text-gray-900"
         >
-          Log disbursement
+          {isEditing ? "Edit disbursement" : "Log disbursement"}
         </h2>
         <p className="mt-1 text-sm text-gray-500">
           Record money paid out. Invoice no., VAT Reg. No., reference number and
@@ -225,7 +229,7 @@ export default function LogDisbursementModal({
               }
               className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-gray-300"
             >
-              {isSaving ? "Saving…" : "Save disbursement"}
+              {isSaving ? "Saving…" : isEditing ? "Save changes" : "Save disbursement"}
             </button>
           </div>
         </form>

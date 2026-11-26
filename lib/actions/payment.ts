@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireStaff } from "@/lib/auth";
+import { requireAdmin, requireStaff } from "@/lib/auth";
 import {
   mapSalaryPaymentToUi,
   paymentInclude,
@@ -63,6 +63,60 @@ export async function recordSalaryPayment(
         error instanceof Error
           ? error.message
           : "An unexpected error occurred while recording the payout.",
+    };
+  }
+}
+
+/** Admin-only: correct the amount, date or note of a payout already logged. */
+export async function updateSalaryPayment(
+  paymentId: string,
+  amount: number,
+  paidAt: string,
+  note?: string
+): Promise<RecordSalaryPaymentResult> {
+  try {
+    await requireAdmin();
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return { success: false, error: "Enter an amount greater than zero." };
+    }
+
+    if (!paidAt) {
+      return { success: false, error: "Payment date is required." };
+    }
+
+    const existing = await prisma.salaryPayment.findUnique({
+      where: { id: paymentId },
+      select: { employeeId: true },
+    });
+
+    if (!existing) {
+      return { success: false, error: "Payout not found." };
+    }
+
+    const payment = await prisma.salaryPayment.update({
+      where: { id: paymentId },
+      data: {
+        amount,
+        paidAt: new Date(paidAt),
+        note: note?.trim() || null,
+      },
+      include: paymentInclude,
+    });
+
+    revalidatePath(`/admin/employees/${existing.employeeId}`);
+    revalidatePath("/admin/employees");
+    revalidatePath("/employee/profile");
+
+    return { success: true, payment: mapSalaryPaymentToUi(payment) };
+  } catch (error) {
+    console.error("[updateSalaryPayment]", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred while updating the payout.",
     };
   }
 }

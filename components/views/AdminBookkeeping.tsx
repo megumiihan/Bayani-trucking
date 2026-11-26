@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useRole } from "@/context/RoleContext";
 import {
   deleteBillable,
   saveBillable,
   saveCollectionReceipt,
+  updateCollectionReceipt,
+  updateDisbursement,
   saveDisbursement,
   updateBillable,
 } from "@/lib/actions/bookkeeping";
@@ -39,7 +41,7 @@ import {
 import type { Client } from "@/lib/clients";
 import type { Supplier } from "@/lib/suppliers";
 import { exportBillablesToCsv } from "@/lib/exportBillables";
-import { exportCollectionReceiptsToCsv } from "@/lib/exportCollectionReceipts";
+import { exportCollectionReceiptsToXlsx } from "@/lib/exportCollectionReceipts";
 import { exportExpensesToCsv } from "@/lib/exportExpenses";
 import {
   type ExpenseUi,
@@ -74,10 +76,17 @@ interface AdminBookkeepingProps {
 
 const LOG_BUTTONS: { ledger: BookkeepingLedger; label: string }[] = [
   { ledger: "billables", label: "Billables" },
+  { ledger: "collection-receipt", label: "Collection receipt" },
   { ledger: "expenses", label: "Expenses" },
   { ledger: "disbursement", label: "Disbursement" },
-  { ledger: "collection-receipt", label: "Collection receipt" },
 ];
+
+/** First ledger of the money-out pair; a divider goes before it. */
+const SECOND_GROUP_START: BookkeepingLedger = "expenses";
+
+function GroupDivider({ className = "" }: { className?: string }) {
+  return <span aria-hidden="true" className={`w-px self-stretch bg-slate-300 ${className}`} />;
+}
 
 export default function AdminBookkeeping({
   initialLedger,
@@ -109,6 +118,9 @@ export default function AdminBookkeeping({
     null
   );
   const [editingExpense, setEditingExpense] = useState<ExpenseUi | null>(null);
+  const [editingDisbursement, setEditingDisbursement] = useState<DisbursementUi | null>(null);
+  const [editingReceipt, setEditingReceipt] = useState<CollectionReceiptUi | null>(null);
+  const [orSearch, setOrSearch] = useState("");
   const [deletingBillable, setDeletingBillable] = useState<BillableUi | null>(
     null
   );
@@ -143,6 +155,14 @@ export default function AdminBookkeeping({
     [expenses, expenseFilters]
   );
 
+  // OR number search; ignores case, spaces and leading zeros ("102" finds "0102").
+  const filteredCollectionReceipts = useMemo(() => {
+    const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, "").replace(/^0+/, "");
+    const query = normalize(orSearch);
+    if (!query) return collectionReceipts;
+    return collectionReceipts.filter((row) => normalize(row.orNumber).includes(query));
+  }, [collectionReceipts, orSearch]);
+
   useEffect(() => {
     setBillables(initialBillables);
   }, [initialBillables]);
@@ -163,9 +183,9 @@ export default function AdminBookkeeping({
     if (ledger === "billables") return filteredBillables.length;
     if (ledger === "expenses") return filteredExpenses.length;
     if (ledger === "disbursement") return disbursements.length;
-    return collectionReceipts.length;
+    return filteredCollectionReceipts.length;
   }, [
-    collectionReceipts,
+    filteredCollectionReceipts,
     disbursements,
     filteredExpenses,
     filteredBillables,
@@ -182,11 +202,11 @@ export default function AdminBookkeeping({
     if (ledger === "disbursement") {
       return disbursements.reduce((sum, row) => sum + row.amount, 0);
     }
-    return collectionReceipts.reduce(
+    return filteredCollectionReceipts.reduce(
       (sum, row) => sum + row.collectionAmount,
       0
     );
-  }, [collectionReceipts, disbursements, filteredExpenses, filteredBillables, ledger]);
+  }, [filteredCollectionReceipts, disbursements, filteredExpenses, filteredBillables, ledger]);
 
   const totalBillables = useMemo(
     () => billables.reduce((sum, row) => sum + row.totalInvoiceAmt, 0),
@@ -232,8 +252,24 @@ export default function AdminBookkeeping({
     setSaveError(null);
     setEditingBillable(null);
     setEditingExpense(null);
+    setEditingDisbursement(null);
+    setEditingReceipt(null);
     selectLedger(next);
     setOpenForm(next);
+  };
+
+  const openEditDisbursement = (disbursement: DisbursementUi) => {
+    setSaveError(null);
+    selectLedger("disbursement");
+    setEditingDisbursement(disbursement);
+    setOpenForm("disbursement");
+  };
+
+  const openEditReceipt = (receipt: CollectionReceiptUi) => {
+    setSaveError(null);
+    selectLedger("collection-receipt");
+    setEditingReceipt(receipt);
+    setOpenForm("collection-receipt");
   };
 
   const openEditBillable = (billable: BillableUi) => {
@@ -255,6 +291,8 @@ export default function AdminBookkeeping({
     setOpenForm(null);
     setEditingBillable(null);
     setEditingExpense(null);
+    setEditingDisbursement(null);
+    setEditingReceipt(null);
     setSaveError(null);
   };
 
@@ -342,7 +380,9 @@ export default function AdminBookkeeping({
   const handleSaveDisbursement = async (input: DisbursementWriteInput) => {
     setIsSaving(true);
     setSaveError(null);
-    const result = await saveDisbursement(input);
+    const result = editingDisbursement
+      ? await updateDisbursement(editingDisbursement.id, input)
+      : await saveDisbursement(input);
     setIsSaving(false);
 
     if (!result.success) {
@@ -350,8 +390,13 @@ export default function AdminBookkeeping({
       return;
     }
 
-    setDisbursements((current) => [result.disbursement, ...current]);
+    setDisbursements((current) =>
+      editingDisbursement
+        ? current.map((row) => (row.id === editingDisbursement.id ? result.disbursement : row))
+        : [result.disbursement, ...current]
+    );
     setOpenForm(null);
+    setEditingDisbursement(null);
   };
 
   const handleSaveCollectionReceipt = async (
@@ -359,7 +404,9 @@ export default function AdminBookkeeping({
   ) => {
     setIsSaving(true);
     setSaveError(null);
-    const result = await saveCollectionReceipt(input);
+    const result = editingReceipt
+      ? await updateCollectionReceipt(editingReceipt.id, input)
+      : await saveCollectionReceipt(input);
     setIsSaving(false);
 
     if (!result.success) {
@@ -368,8 +415,13 @@ export default function AdminBookkeeping({
     }
 
     addCreatedClient(result.createdClient);
-    setCollectionReceipts((current) => [result.receipt, ...current]);
+    setCollectionReceipts((current) =>
+      editingReceipt
+        ? current.map((row) => (row.id === editingReceipt.id ? result.receipt : row))
+        : [result.receipt, ...current]
+    );
     setOpenForm(null);
+    setEditingReceipt(null);
   };
 
   return (
@@ -380,14 +432,16 @@ export default function AdminBookkeeping({
         actions={
           <>
             {LOG_BUTTONS.map((button) => (
-              <button
-                key={button.ledger}
-                type="button"
-                onClick={() => openLogForm(button.ledger)}
-                className="rounded-lg bg-blue-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
-              >
-                {button.label}
-              </button>
+              <Fragment key={button.ledger}>
+                {button.ledger === SECOND_GROUP_START && <GroupDivider className="mx-1" />}
+                <button
+                  type="button"
+                  onClick={() => openLogForm(button.ledger)}
+                  className="rounded-lg bg-blue-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                >
+                  {button.label}
+                </button>
+              </Fragment>
             ))}
             <Link
               href="/admin/bookkeeping/directory"
@@ -462,9 +516,11 @@ export default function AdminBookkeeping({
                   : ledger === "expenses"
                     ? `${filteredExpenses.length} of ${expenses.length} expenses`
                     : ledger === "collection-receipt"
-                      ? `${collectionReceipts.length} collection receipt${
-                          collectionReceipts.length === 1 ? "" : "s"
-                        }`
+                      ? orSearch.trim()
+                        ? `${filteredCollectionReceipts.length} of ${collectionReceipts.length} collection receipts`
+                        : `${collectionReceipts.length} collection receipt${
+                            collectionReceipts.length === 1 ? "" : "s"
+                          }`
                       : "Switch the table to review another ledger."}
               </p>
             </div>
@@ -493,12 +549,12 @@ export default function AdminBookkeeping({
                 <button
                   type="button"
                   onClick={() =>
-                    exportCollectionReceiptsToCsv(collectionReceipts)
+                    void exportCollectionReceiptsToXlsx(filteredCollectionReceipts)
                   }
-                  disabled={collectionReceipts.length === 0}
+                  disabled={filteredCollectionReceipts.length === 0}
                   className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Export CSV
+                  Export all
                 </button>
               )}
             </div>
@@ -512,20 +568,22 @@ export default function AdminBookkeeping({
             {BOOKKEEPING_LEDGERS.map((value) => {
               const isActive = ledger === value;
               return (
-                <button
-                  key={value}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={() => selectLedger(value)}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 ${
-                    isActive
-                      ? "bg-white text-blue-700 shadow-sm"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  {BOOKKEEPING_LEDGER_LABELS[value]}
-                </button>
+                <Fragment key={value}>
+                  {value === SECOND_GROUP_START && <GroupDivider className="my-1 mx-1" />}
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => selectLedger(value)}
+                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 ${
+                      isActive
+                        ? "bg-white text-blue-700 shadow-sm"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    {BOOKKEEPING_LEDGER_LABELS[value]}
+                  </button>
+                </Fragment>
               );
             })}
           </div>
@@ -545,6 +603,30 @@ export default function AdminBookkeeping({
             />
           )}
 
+          {ledger === "collection-receipt" && (
+            <label className="relative block w-full sm:max-w-xs">
+              <span className="sr-only">Search by OR number</span>
+              <svg
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.8}
+                stroke="currentColor"
+                aria-hidden="true"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+              </svg>
+              <input
+                type="search"
+                inputMode="numeric"
+                value={orSearch}
+                onChange={(e) => setOrSearch(e.target.value)}
+                placeholder="Search OR number"
+                className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+              />
+            </label>
+          )}
+
           {ledger === "disbursement" && (
             <p
               role="status"
@@ -562,8 +644,11 @@ export default function AdminBookkeeping({
           expenses={filteredExpenses}
           hasExpenseFilters={hasActiveExpenseFilters(expenseFilters)}
           disbursements={disbursements}
-          collectionReceipts={collectionReceipts}
+          collectionReceipts={filteredCollectionReceipts}
+          hasOrSearch={orSearch.trim().length > 0}
           onLog={() => openLogForm(ledger)}
+          onEditDisbursement={openEditDisbursement}
+          onEditReceipt={openEditReceipt}
           onEditBillable={openEditBillable}
           onDeleteBillable={(billable) => {
             setDeleteError(null);
@@ -622,6 +707,7 @@ export default function AdminBookkeeping({
       <LogDisbursementModal
         isOpen={openForm === "disbursement"}
         suppliers={suppliers}
+        disbursement={editingDisbursement}
         isSaving={isSaving}
         error={saveError}
         onClose={closeForm}
@@ -634,6 +720,7 @@ export default function AdminBookkeeping({
         clients={clients}
         billables={billables}
         collectedBillableIds={collectedBillableIds}
+        receipt={editingReceipt}
         onClose={closeForm}
         onSave={handleSaveCollectionReceipt}
       />
@@ -677,7 +764,10 @@ function LedgerTable({
   hasExpenseFilters,
   disbursements,
   collectionReceipts,
+  hasOrSearch,
   onLog,
+  onEditDisbursement,
+  onEditReceipt,
   onEditBillable,
   onDeleteBillable,
   onEditExpense,
@@ -690,7 +780,10 @@ function LedgerTable({
   hasExpenseFilters: boolean;
   disbursements: DisbursementUi[];
   collectionReceipts: CollectionReceiptUi[];
+  hasOrSearch: boolean;
   onLog: () => void;
+  onEditDisbursement: (disbursement: DisbursementUi) => void;
+  onEditReceipt: (receipt: CollectionReceiptUi) => void;
   onEditBillable: (billable: BillableUi) => void;
   onDeleteBillable: (billable: BillableUi) => void;
   onEditExpense: (expense: ExpenseUi) => void;
@@ -858,6 +951,7 @@ function LedgerTable({
           "Reference no.",
           "Description",
           "Logged by",
+          "Actions",
         ]}
         emptyTitle="No disbursements yet"
         emptyDescription="Log a payout to see it in this table."
@@ -890,6 +984,12 @@ function LedgerTable({
             <td className="whitespace-nowrap px-4 py-3 text-slate-700">
               {row.createdByName}
             </td>
+            <td className="whitespace-nowrap px-4 py-3">
+              <BillableRowActions
+                editLabel="Edit disbursement"
+                onEdit={() => onEditDisbursement(row)}
+              />
+            </td>
           </tr>
         ))}
       </DataTable>
@@ -899,6 +999,7 @@ function LedgerTable({
   return (
     <DataTable
       columns={[
+        "Export",
         "Client",
         "OR number",
         "SI / invoice no.",
@@ -912,10 +1013,13 @@ function LedgerTable({
         "Who paid",
         "Who received",
         "Logged by",
+        "Actions",
       ]}
-      emptyTitle="No collection receipts yet"
-      emptyDescription="Log an official receipt to see it in this table."
-      onLog={onLog}
+      emptyTitle={hasOrSearch ? "No receipts match that OR number" : "No collection receipts yet"}
+      emptyDescription={
+        hasOrSearch ? "Check the number or clear the search." : "Log an official receipt to see it in this table."
+      }
+      onLog={hasOrSearch ? undefined : onLog}
       isEmpty={collectionReceipts.length === 0}
     >
       {collectionReceipts.flatMap((row) => {
@@ -930,6 +1034,19 @@ function LedgerTable({
           >
             {index === 0 && (
               <>
+                <td rowSpan={span} className={receiptCell}>
+                  <button
+                    type="button"
+                    onClick={() => void exportCollectionReceiptsToXlsx([row])}
+                    title={`Download OR ${row.orNumber} as an Excel receipt`}
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                    </svg>
+                    Export
+                  </button>
+                </td>
                 <td rowSpan={span} className={`${receiptCell} whitespace-nowrap font-medium text-slate-900`}>
                   {row.clientName || "—"}
                 </td>
@@ -968,6 +1085,12 @@ function LedgerTable({
                 </td>
                 <td rowSpan={span} className={`${receiptCell} whitespace-nowrap text-slate-700`}>
                   {row.createdByName}
+                </td>
+                <td rowSpan={span} className={receiptCell}>
+                  <BillableRowActions
+                    editLabel={`Edit OR ${row.orNumber}`}
+                    onEdit={() => onEditReceipt(row)}
+                  />
                 </td>
               </>
             )}

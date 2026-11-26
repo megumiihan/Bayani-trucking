@@ -38,6 +38,10 @@ export default async function EmployeeDetailPage({
       initialPayments={payments}
       loginEmail={loginEmail}
       governmentIds={governmentIds}
+      // Secretaries may switch other drivers and helpers; the Secretary role stays admin-only.
+      canSecretaryEditRole={
+        !isAdmin && viewer.employeeId !== employee.id && employee.role !== "Secretary"
+      }
     />
   );
 }
